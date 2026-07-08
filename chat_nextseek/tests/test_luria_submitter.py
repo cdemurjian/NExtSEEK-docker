@@ -69,3 +69,41 @@ def test_submit_luria_skips_when_env_incomplete(tmp_path, monkeypatch):
 
 def test_submit_luria_missing_launch_returns_empty():
     assert sub.submit_luria("/no/such/launch.yml", luria_env=LE) == []
+
+
+def _raise(*a, **k):
+    raise RuntimeError("boom")
+
+
+def test_submit_luria_cleans_temp_files_on_render_error(tmp_path, monkeypatch):
+    launch, ss = _fixture(tmp_path)
+    _patch_transport(monkeypatch)
+    created = []
+    real_mkstemp = sub.tempfile.mkstemp
+
+    def tracking_mkstemp(*a, **k):
+        fd, path = real_mkstemp(*a, **k)
+        created.append(path)
+        return fd, path
+
+    monkeypatch.setattr(sub.tempfile, "mkstemp", tracking_mkstemp)
+    monkeypatch.setattr(sub, "render_run_script", _raise)
+    runs = sub.submit_luria(str(launch), luria_env=LE)
+    assert runs == []  # entry skipped after render error
+    import os as _os
+    assert created and all(not _os.path.exists(p) for p in created)  # no temp file left behind
+
+
+def test_submit_luria_one_bad_entry_does_not_abort_siblings(tmp_path, monkeypatch):
+    import yaml as _y
+    ss = tmp_path / "samplesheet.csv"
+    ss.write_text("sample,fastq_1\nA,a.fq.gz\n")
+    (tmp_path / "params.yml").write_text(_y.safe_dump({"input": str(ss)}))
+    (tmp_path / "launch.yml").write_text(_y.safe_dump({"launch": [
+        {"name": "bad", "params-file": "./params.yml"},  # missing pipeline/revision -> skipped
+        {"name": "good", "pipeline": "nf-core/rnaseq", "revision": "3.21.0", "params-file": "./params.yml"},
+    ]}))
+    _patch_transport(monkeypatch)
+    runs = sub.submit_luria(str(tmp_path / "launch.yml"), luria_env=LE)
+    assert len(runs) == 1
+    assert runs[0]["run_name"] == "good"

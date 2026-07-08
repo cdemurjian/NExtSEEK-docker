@@ -94,19 +94,20 @@ def _submit_one(entry, idx, parent, working, luria_env, resources, job_name, key
         return None
     params["input"] = remote_samplesheet  # nextflow reads the remote copy
 
-    fd, params_tmp = tempfile.mkstemp(prefix="params_", suffix=".yml")
-    os.close(fd)
-    Path(params_tmp).write_text(_yaml.safe_dump(params, sort_keys=False), encoding="utf-8")
-
-    run_sh = render_run_script(
-        job_name=job_name or name, pipeline=pipeline, revision=revision,
-        work_dir=work_dir, singularity_cache=cache_dir, resources=resources,
-    )
-    fd, run_tmp = tempfile.mkstemp(prefix="run_", suffix=".sh")
-    os.close(fd)
-    Path(run_tmp).write_text(run_sh, encoding="utf-8")
-
+    params_tmp = run_tmp = None
     try:
+        fd, params_tmp = tempfile.mkstemp(prefix="params_", suffix=".yml")
+        os.close(fd)
+        Path(params_tmp).write_text(_yaml.safe_dump(params, sort_keys=False), encoding="utf-8")
+
+        run_sh = render_run_script(
+            job_name=job_name or name, pipeline=pipeline, revision=revision,
+            work_dir=work_dir, singularity_cache=cache_dir, resources=resources,
+        )
+        fd, run_tmp = tempfile.mkstemp(prefix="run_", suffix=".sh")
+        os.close(fd)
+        Path(run_tmp).write_text(run_sh, encoding="utf-8")
+
         ssh_run(luria_env, f"mkdir -p {remote_run_dir} {work_dir}", key_path=key_path)
         scp_file(luria_env, run_tmp, f"{remote_run_dir}/run.sh", key_path=key_path)
         scp_file(luria_env, params_tmp, f"{remote_run_dir}/params.yml", key_path=key_path)
@@ -114,10 +115,11 @@ def _submit_one(entry, idx, parent, working, luria_env, resources, job_name, key
         out = ssh_run(luria_env, f"cd {remote_run_dir} && sbatch run.sh", key_path=key_path)
     finally:
         for f in (params_tmp, run_tmp):
-            try:
-                os.remove(f)
-            except OSError:
-                pass
+            if f:
+                try:
+                    os.remove(f)
+                except OSError:
+                    pass
 
     m = _JOB_ID_RE.search(out or "")
     job_id = m.group(1) if m else None
