@@ -195,7 +195,7 @@ class DispatchTests(SimpleTestCase):
                                    "narrative": None, "notes": None}}
             saved = {"geo_seq_workbooks": ["/o/geo.xlsx"], "merged_report": "/o/m.json"}
             return {"reports": []}, rwo, saved, "done"
-        with patch("chat_nextseek.portable.generate_report_outputs", side_effect=fake_gro) as gro, \
+        with patch("chat_nextseek.reports.outputs.generate_report_outputs", side_effect=fake_gro) as gro, \
              patch("chat_nextseek.portable.report_writer_agent") as rwa:
             out = self._run("generate-submission", {"type": "GEO", "uids": "MUS-1, MUS-2"},
                             outputs_dir="/o")
@@ -219,7 +219,7 @@ class DispatchTests(SimpleTestCase):
             rt = kw["reporter_plan"].report_type
             seen.append(rt)
             return {"reports": []}, {"all_samples": {"report_type": rt, "report": {}}}, {}, ""
-        with patch("chat_nextseek.portable.generate_report_outputs", side_effect=fake_gro), \
+        with patch("chat_nextseek.reports.outputs.generate_report_outputs", side_effect=fake_gro), \
              patch("chat_nextseek.portable.report_writer_agent"):
             for t in ("SRA", "PRIDE"):
                 out = self._run("generate-submission", {"type": t, "uids": "X-1"}, outputs_dir="/o")
@@ -234,7 +234,7 @@ class DispatchTests(SimpleTestCase):
         def fake_gro(**kw):
             captured.update(kw)
             return {"reports": []}, {"all_samples": {"report_type": "GEO", "report": {}}}, {}, ""
-        with patch("chat_nextseek.portable.generate_report_outputs", side_effect=fake_gro), \
+        with patch("chat_nextseek.reports.outputs.generate_report_outputs", side_effect=fake_gro), \
              patch("chat_nextseek.portable.report_writer_agent"):
             self._run("generate-submission", {"type": "GEO", "uids": "MUS-1"}, outputs_dir="/o")
         self.assertTrue(captured["user_query"].strip(), "blank query reached generate_report_outputs")

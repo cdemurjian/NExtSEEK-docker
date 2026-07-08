@@ -145,7 +145,12 @@ def _generate_submission(args, config, session, write_gate, neo4j_exec, outputs_
     #     saved_files (geo_seq_workbooks / sra_* / pride_* / nfcore_* / ...),
     #     which the bundle/download + CC staging then serve.
     # See GitHub issue #21 (reporter port defect / drift).
-    from chat_nextseek.portable import generate_report_outputs, report_writer_agent
+    from chat_nextseek.portable import report_writer_agent
+    # generate_report_outputs returns a tuple (not a single Pydantic model), so it
+    # is intentionally NOT on the pinned portable.__all__ contract surface. Import
+    # it from its home module. (Keeping it out of portable also keeps chat_nextseek
+    # byte-identical to its upstream vendored snapshot.)
+    from chat_nextseek.reports.outputs import generate_report_outputs
     from chat_nextseek.schemas.chat import ReporterPlan
 
     uids = [u.strip() for u in args["uids"].split(",") if u.strip()]
