@@ -1,10 +1,11 @@
 """Tools + dispatch for the full-agentic nf-core pipeline agent.
 
-Five anthropic-style tools driven by BedrockClient.chat_with_tools:
+Anthropic-style tools driven by BedrockClient.chat_with_tools (submit tools exposed per config):
   - resolve_samples:   UIDs/last-search -> compact leaf table (+ caches refs)
   - write_samplesheet: agent-built cohorts -> validated samplesheet CSV (CSV only)
   - configure_run:     curated params + species references -> params.yml + launch.yml
   - submit_to_tower:   submit the built launch artifacts
+  - submit_to_luria:   submit the built launch artifacts to the Luria SLURM cluster
   - conclude:          terminate the conversation (control tool, intercepted by the loop)
 """
 from __future__ import annotations
