@@ -23,7 +23,7 @@ if TYPE_CHECKING:
     from ..config import ChatConfig
     from ..session import SessionState
 
-from .agent_tools import PIPELINE_TOOL_SCHEMAS, dispatch_pipeline_tool_call
+from .agent_tools import build_pipeline_tool_schemas, dispatch_pipeline_tool_call
 from ..helpers import summarize_pinned_bundle
 from ..seqera.catalog import catalog_for_prompt
 
@@ -113,7 +113,7 @@ def _run_loop(session, config: "ChatConfig", *, log_dir: str | None) -> dict[str
     log_resolved_dir = log_dir or getattr(config, "LOG_DIR", ".")
 
     for _ in range(MAX_ITER):
-        resp = client.chat_with_tools(messages=messages, tools=PIPELINE_TOOL_SCHEMAS,
+        resp = client.chat_with_tools(messages=messages, tools=build_pipeline_tool_schemas(config),
                                       system=system_prompt, model=model_name)
         content = resp.get("content", []) or []
         tool_use_blocks = [b for b in content if isinstance(b, dict) and b.get("type") == "tool_use"]
