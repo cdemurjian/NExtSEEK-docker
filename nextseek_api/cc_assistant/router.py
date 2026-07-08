@@ -50,7 +50,11 @@ _CC_PATTERNS = re.compile(
 _NS_PATTERNS = re.compile(
     r"\b(find|search|how many|list|show me|which|what|samples?|mice|mouse|"
     r"monkey|monkeys|pbmc|patient|patients|treated|study|studies|assay|assays|"
-    r"project|projects|lineage|cohort|tissue|specimen)\b",
+    r"project|projects|lineage|cohort|tissue|specimen|"
+    # nf-core / Seqera pipeline intents route to NS (chat_nextseek's pipeline_agent),
+    # not to the sandboxed CC agent (which has no pipeline-run op — deferred).
+    r"nf-?core|rnaseq|scrnaseq|sarek|chipseq|atacseq|methylseq|ampliseq|"
+    r"fetchngs|samplesheet|seqera)\b",
     re.IGNORECASE,
 )
 

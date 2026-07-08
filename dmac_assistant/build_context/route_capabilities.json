@@ -5,7 +5,7 @@
       "description": "Deterministic NExtSEEK pipeline via chat_nextseek (no Claude reasoning loop).",
       "tools": [
         "entity_agent", "parser_agent", "api_agent", "graph_agent",
-        "reporter_agent", "memory_agent", "system_agent"
+        "reporter_agent", "memory_agent", "system_agent", "pipeline_agent"
       ],
       "best_for": "Structured biomedical sample / project / study queries that map onto chat_nextseek's pipeline.",
       "not_for": "File I/O, code execution, free-form reasoning, multi-tool work outside chat_nextseek.",
@@ -44,6 +44,15 @@
           "name": "reporter_summary",
           "description": "Project / RPPR-style summaries.",
           "example_queries": ["Give me an RPPR summary for SRP."]
+        },
+        {
+          "name": "pipeline_build_and_launch",
+          "description": "Build and launch an nf-core / Seqera pipeline run: resolve samples, group into cohorts, write the samplesheet, configure run params (species + reference bundles), and submit to Seqera/Tower. Handled by chat_nextseek's full-agentic pipeline_agent on the NS path.",
+          "example_queries": [
+            "Run rnaseq on these mice, group by exposure, and submit to Tower.",
+            "Launch the sarek pipeline for the D.SEQ samples in the Impact study.",
+            "Build an nf-core scrnaseq samplesheet for these samples and configure the run."
+          ]
         }
       ]
     },
@@ -52,7 +61,7 @@
       "description": "Container Claude Code: full agentic environment with file I/O, code execution, and arbitrary plugins / skills.",
       "tools": ["nextseek-api", "bash", "filesystem", "skill-runner"],
       "best_for": "Open-ended reasoning, file I/O, code, multi-tool workflows.",
-      "not_for": "Pure NExtSEEK lookups that chat_nextseek answers deterministically.",
+      "not_for": "Pure NExtSEEK lookups that chat_nextseek answers deterministically, or building/launching nf-core pipelines (those go to the nextseek_query pipeline_build_and_launch route).",
       "task_families": [
         {
           "name": "file_io_and_summarization",
