@@ -1,0 +1,22 @@
+#!/bin/bash
+#SBATCH --job-name={{JOB_NAME}}
+#SBATCH --partition={{PARTITION}}
+#SBATCH --output=nf-%j.out
+#SBATCH --time={{TIME}}
+#SBATCH --cpus-per-task={{CPUS}}
+#SBATCH --mem={{MEM}}
+
+set -euo pipefail
+
+module load singularity/3.10.4
+source /home/software/conda/miniconda3/etc/profile.d/conda.sh
+conda activate nextflow
+
+export NXF_SINGULARITY_CACHEDIR={{SINGULARITY_CACHE}}
+
+nextflow run {{PIPELINE}} \
+    -r {{REVISION}} \
+    -profile slurm,singularity \
+    -params-file params.yml \
+    -w {{WORK_DIR}} \
+    -resume
