@@ -6,7 +6,6 @@ from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from streamlit.runtime.state.session_state_proxy import SessionStateProxy
-    from ...orchestrator import SendEvent
 
 from ...session import SessionState
 from ...config import ChatConfig

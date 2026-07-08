@@ -202,11 +202,6 @@ def _build_step_from_candidate(candidate: ParserCandidate, step_id: int, user_qu
 
 
 def _normalize_plan_step(step: PlanStep, parser_plan: MultiParserPlan | None, user_query: str) -> PlanStep:
-    # Function-local import: planner.execution imports this module at top level,
-    # so a top-level `from .planner.execution import _TERMINAL_REPLY_TOOLS`
-    # would be a circular import. Import is cached after first call.
-    from .planner.execution import _TERMINAL_REPLY_TOOLS
-
     execution = step.execution
     candidate = None
     if parser_plan and execution.parser_candidate_id:
@@ -382,6 +377,7 @@ def _canonical_multi_parse(
             usage_label="MULTI_PARSER",
             thinking_budget=mp_budget,
             client=mp_client,
+            timeout_seconds=60,
         )
         normalized_candidates = [_fill_candidate_defaults(c) for c in result.candidates]
         result = result.model_copy(update={"candidates": normalized_candidates})
@@ -543,6 +539,7 @@ def parser_agent(session: SessionState | SessionStateProxy, config: ChatConfig, 
             usage_label="PARSER",
             thinking_budget=parser_thinking_budget,
             client=parser_client,
+            timeout_seconds=60,
         )
     except Exception as e:
         print("[DEBUG][PARSER] Exception or parse error:", repr(e))

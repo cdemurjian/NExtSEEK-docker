@@ -1,6 +1,5 @@
 import json
 import os
-import re
 import sys
 from contextlib import nullcontext, redirect_stdout
 from datetime import datetime, timezone
@@ -12,23 +11,6 @@ from dotenv import load_dotenv
 
 from .llm_clients import BaseLLMClient, build_llm_client
 
-
-def _resolve_nextseek_base_url() -> str | None:
-    """Transport URL for NExtSEEK REST self-calls.
-
-    Prefers NEXTSEEK_INTERNAL_BASE_URL — the container-internal listener URL
-    rendered by startup, decoupled from the published host port — over the
-    public NEXTSEEK_BASE_URL (which derives from NEXTSEEK_HOSTNAME and tracks
-    the host-published port, auto-bumped when 8000 is busy on the host). The
-    self-calls execute inside the nextseek container, so a bumped host port in
-    the public URL points at nothing (Step 7d greenfield: connection refused).
-    """
-    url = os.getenv("NEXTSEEK_INTERNAL_BASE_URL") or os.getenv("NEXTSEEK_BASE_URL")
-    if url is None:
-        return None
-    return url.rstrip("/")
-
-
 class ChatConfig:
     def __init__(self, config_map={}):
         """Load configuration, provider clients, prompts, and cached context for one process."""
@@ -36,14 +18,17 @@ class ChatConfig:
         self.CATALOG_ENDPOINT_METHODS_ALL: dict[str, set[str]] = {}
         self.METHOD_PRIORITY = ["GET", "POST", "PUT", "PATCH", "DELETE"]
 
-        # Name -> id maps, built DYNAMICALLY from the live DB in
-        # _initialize_runtime_state (NOT hardcoded — the old literal held ids from
-        # another instance). PROJECT_NAME_TO_ID = seek_production.projects only;
-        # INVESTIGATION_NAME_TO_ID = seek_production.investigations, kept SEPARATE
-        # so the report can offer an investigation-scoped path without touching the
-        # project path. Both UPPER-cased keys; both {} when the DB is unreachable.
-        self.PROJECT_NAME_TO_ID: dict[str, int] = {}
-        self.INVESTIGATION_NAME_TO_ID: dict[str, int] = {}
+        self.PROJECT_NAME_TO_ID = {
+            "IMPACT": 2,
+            "SRP": 3,
+            "METNET": 4,
+            "PUBLISHED": 6,
+            "CGR": 7,
+            "CGR-ENDO": 7,
+            "BTC": 9,
+            "BREAK THROUGH CANCER": 9,
+            "CSBC": 10,
+        }
 
         # Apply config_map first so _get_env_config can reference self.MODEL_MODE,
         # self.GCP_API_KEY, etc. when they are provided via DB/JSON config object.
@@ -83,22 +68,7 @@ class ChatConfig:
         self.FULL_PROJECTS_MAP: dict = {
             item["name"]: item for item in self.FULL_PROJECTS if item.get("name")
         }
-        # Dynamic maps from the live DB (replace the removed hardcoded literal):
-        # projects and investigations kept in SEPARATE maps.
-        self.PROJECT_NAME_TO_ID = self._load_name_to_id_from_db("seek_production.projects", env="prod")
         self.PROJECT_NAME_TO_ID = self._merge_project_name_to_id(self.PROJECT_NAME_TO_ID, self.FULL_PROJECTS)
-        self.INVESTIGATION_NAME_TO_ID = self._load_name_to_id_from_db("seek_production.investigations", env="prod")
-
-        # Published-report umbrella projects (DEV-ONLY opt-in; DEFAULT EMPTY so
-        # prod is unaffected). For a project listed here, run_project_published_report
-        # reports ALL investigations' samples instead of filtering investigation
-        # titles by the project-name hint — needed where one umbrella project
-        # (e.g. the dev "Published Data") contains every investigation and so
-        # matches no investigation title. Set via NEXTSEEK_PUBLISHED_UMBRELLA_PROJECTS
-        # (comma-separated project names and/or ids). See issue #1 / option 2.
-        self.PUBLISHED_UMBRELLA_PROJECTS = self._parse_umbrella_projects(
-            os.environ.get("NEXTSEEK_PUBLISHED_UMBRELLA_PROJECTS", "")
-        )
 
         # Min JSONs actually used by the agents
         self.MIN_SAMPLETYPES = self._load_json_list("min_sampletypes_db.json", "min sampletypes (db)")
@@ -190,6 +160,7 @@ class ChatConfig:
         self.PARSER_SYSTEM_PROMPT = self._load_composed_parser_prompt("parser_agent.txt")
         self.REPORTER_SYSTEM_PROMPT = self._load_prompt("reporter_agent.txt")
         self.REPORT_WRITER_SYSTEM_PROMPT = self._load_prompt("report_writer_agent.txt")
+        self.REPORT_CODER_SYSTEM_PROMPT = self._load_prompt("report_coder_agent.txt")
         self.API_AGENT_SYSTEM_PROMPT = self._load_prompt("api_agent.txt")
         self.CHATTER_SYSTEM_PROMPT = self._load_prompt("chatter_agent.txt")
         self.MEMORY_SYSTEM_PROMPT = self._load_prompt("memory_agent.txt")
@@ -201,7 +172,6 @@ class ChatConfig:
         self.CONTEXT_ENGINEER_SYSTEM_PROMPT = self._load_prompt("context_engineer.txt")
         self.EVALUATOR_V1_SYSTEM_PROMPT = self._load_prompt("evaluator-v1-agent.txt")
         self.SEQERA_AGENT_SYSTEM_PROMPT = self._load_prompt("seqera_agent.txt")
-        self.WIZARD_AGENT_SYSTEM_PROMPT = self._load_prompt("wizard_agent.txt")
         self.CAPABILITIES_DOC = self._load_capabilities_doc()
 
         # Seqera / Tower environment for the NFCORE flow.
@@ -380,16 +350,13 @@ class ChatConfig:
         # NExtSEEK API config
         # ======================================================
 
-        env_config_map["NEXTSEEK_BASE_URL"] = _resolve_nextseek_base_url()
+        env_config_map["NEXTSEEK_BASE_URL"] = os.getenv("NEXTSEEK_BASE_URL")
+        if env_config_map["NEXTSEEK_BASE_URL"] is not None:
+            env_config_map["NEXTSEEK_BASE_URL"] = env_config_map["NEXTSEEK_BASE_URL"].rstrip("/")
         env_config_map["API_USER"] = os.getenv("API_USER")
         env_config_map["API_PASS"] = os.getenv("API_PASS")
 
-        _base_url_source = (
-            "NEXTSEEK_INTERNAL_BASE_URL"
-            if os.getenv("NEXTSEEK_INTERNAL_BASE_URL")
-            else "NEXTSEEK_BASE_URL"
-        )
-        print(f"[CONFIG] NEXTSEEK_BASE_URL={env_config_map["NEXTSEEK_BASE_URL"] or 'NOT SET'} (from {_base_url_source})")
+        print(f"[CONFIG] NEXTSEEK_BASE_URL={env_config_map["NEXTSEEK_BASE_URL"] or 'NOT SET'}")
         print(f"[CONFIG] API_USER={'SET' if env_config_map["API_USER"] else 'NOT SET'}")
         print(f"[CONFIG] API_PASS={'SET' if env_config_map["API_PASS"] else 'NOT SET'}")
         if env_config_map["AGENT_MODEL_CATALOG"]:
@@ -747,12 +714,6 @@ class ChatConfig:
     # ======================================================
 
 
-    # A refresh happened today iff this marker exists with a today mtime. Only a
-    # SUCCESSFUL _fetch_context_files_from_db writes it, and it is never baked
-    # into the image (runtime-only), so a stale context file baked with a today
-    # mtime can no longer masquerade as a fresh cache (2026-07-05 BUG-2).
-    _REFRESH_MARKER_NAME = ".context_db_refresh"
-
     def _is_today(self, path: Path) -> bool:
         """
         Check whether a file's mtime falls on today's UTC date.
@@ -766,28 +727,10 @@ class ChatConfig:
         return datetime.fromtimestamp(ts, timezone.utc).date() == today
 
 
-    def _write_refresh_marker(self) -> None:
-        """Record that a successful DB refresh happened now. Best-effort: if the
-        context dir is read-only the marker simply never registers as today, so
-        the gate degrades to always-refresh (safe) rather than crashing."""
-        try:
-            marker = Path(self.CONTEXT_DIR) / self._REFRESH_MARKER_NAME
-            marker.parent.mkdir(parents=True, exist_ok=True)
-            marker.write_text("", encoding="utf-8")
-        except Exception as e:
-            print(f"[CONFIG][DB] Could not write refresh marker: {e!r}")
-
-
     def _ensure_context_files(self, env: str = "prod") -> dict[str, Path]:
         """
         Ensure DB-driven context JSON files exist and are fresh for today.
         Returns a dict of {label: Path}.
-
-        Freshness is tracked by ``_REFRESH_MARKER_NAME`` (written only by a
-        successful DB refresh), NOT by the context files' own mtime — a file
-        baked into the image on run-day carries a today mtime but stale content,
-        so trusting file mtime silently skipped the refresh (BUG-2). We still
-        refresh when any target file is missing.
         """
         targets = {
             "sampletypes_full": Path(self.CONTEXT_DIR) / "sampletypes_db.json",
@@ -797,21 +740,17 @@ class ChatConfig:
             "projects_full": Path(self.CONTEXT_DIR) / "projects_db.json",
         }
 
-        marker = Path(self.CONTEXT_DIR) / self._REFRESH_MARKER_NAME
-        needs_refresh = (not self._is_today(marker)) or any(not p.exists() for p in targets.values())
+        needs_refresh = any(not p.exists() or not self._is_today(p) for p in targets.values())
         if needs_refresh:
-            print("[CONFIG][DB] No verified DB refresh today (or a file is missing); refreshing from DB.")
-            fetched = self._fetch_context_files_from_db(env=env)
-            if fetched:  # a real DB pull produced at least one file
-                self._write_refresh_marker()
-            paths = dict(fetched)
+            print("[CONFIG][DB] Context files are stale or missing; refreshing from DB.")
+            paths = self._fetch_context_files_from_db(env=env)
             # Merge expected keys with returned paths for convenience
             for key, path in targets.items():
                 if path.exists():
                     paths[key] = path
             return paths
 
-        print("[CONFIG][DB] DB refresh already verified for today; skipping DB export.")
+        print("[CONFIG][DB] Context files are fresh for today; skipping DB export.")
         return {k: v for k, v in targets.items() if v.exists()}
 
     # ======================================================
@@ -850,71 +789,6 @@ class ChatConfig:
         if data is not None:
             print(f"[CONFIG][CONTEXT] {label}: expected list, got {type(data)}")
         return []
-
-    @staticmethod
-    def _norm_project_key(value) -> str:
-        """Case/space-insensitive key for project name or id matching."""
-        return re.sub(r"\s+", "", str(value).strip().lower())
-
-    def _parse_umbrella_projects(self, raw: str) -> set[str]:
-        """Parse NEXTSEEK_PUBLISHED_UMBRELLA_PROJECTS (comma-separated names/ids)
-        into a normalized set. Empty/blank -> empty set (prod-safe default)."""
-        return {
-            self._norm_project_key(tok)
-            for tok in (raw or "").split(",")
-            if tok and tok.strip()
-        }
-
-    def is_umbrella_published_project(self, project, project_id=None) -> bool:
-        """True when the published report should SKIP the investigation-title
-        hint (report ALL samples) for this project. Opt-in via
-        NEXTSEEK_PUBLISHED_UMBRELLA_PROJECTS; empty by default so prod is
-        unchanged. Matches on normalized project name OR id."""
-        umbrella = getattr(self, "PUBLISHED_UMBRELLA_PROJECTS", None) or set()
-        if not umbrella:
-            return False
-        keys = set()
-        if project is not None:
-            keys.add(self._norm_project_key(project))
-        if project_id is not None:
-            keys.add(self._norm_project_key(project_id))
-        return bool(keys & umbrella)
-
-    def _load_name_to_id_from_db(self, table: str, env: str = "prod") -> dict[str, int]:
-        """Build an UPPER-cased ``title -> id`` map from one live DB table (e.g.
-        ``seek_production.projects`` or ``seek_production.investigations``) instead
-        of a hardcoded literal. ``table`` is a fixed internal constant (never user
-        input). Returns ``{}`` if the DB is unreachable — callers must NOT fall back
-        to hardcoded ids.
-        """
-        mapping: dict[str, int] = {}
-        conn = self._db_conn or self._connect_db(env=env)
-        if conn is None:
-            return mapping
-        try:
-            try:
-                cursor = conn.cursor(dictionary=True)
-                dict_rows = True
-            except Exception:
-                cursor = conn.cursor()
-                dict_rows = False
-            cursor.execute(f"SELECT id, title FROM {table}")
-            for row in cursor.fetchall() or []:
-                if dict_rows and isinstance(row, dict):
-                    rid, title = row.get("id"), row.get("title")
-                elif isinstance(row, (list, tuple)) and len(row) >= 2:
-                    rid, title = row[0], row[1]
-                else:
-                    continue
-                if isinstance(rid, int) and isinstance(title, str) and title.strip():
-                    mapping.setdefault(title.strip().upper(), rid)
-            try:
-                cursor.close()
-            except Exception:
-                pass
-        except Exception as e:
-            print(f"[CONFIG][DB] name->id load failed for {table}: {e!r}")
-        return mapping
 
     def _merge_project_name_to_id(self, base_map: dict[str, int], projects: list[dict]) -> dict[str, int]:
         """

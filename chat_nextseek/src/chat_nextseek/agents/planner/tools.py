@@ -30,7 +30,6 @@ from ...schemas import (
     ParserPlan,
     PlanStep,
 )
-from ..parser import _infer_report_type_from_query, _resolve_step_inputs
 from ..api import api_agent_build_request
 from ..graph import graph_agent
 from ..memory import memory_agent_answer, memory_coder_agent
@@ -404,23 +403,17 @@ def _plan_tool_report_generation(
         rplan = rplan.model_copy(update=reporter_updates)
     report_type_value = (rplan.report_type or "").upper()
     if report_type_value.startswith("NFCORE"):
-        from chat_nextseek.pipeline import wizard as nfcore_wizard
-
-        wizard_result = nfcore_wizard.start(
-            session,
-            config,
-            user_query=query,
-            parser_plan=synthetic_parser_plan,
-            reporter_plan=rplan,
-        )
+        # The planner pipeline is defunct; nf-core builds run via the standard
+        # assistant (run_query -> pipeline_agent), not the planner. Do not launch
+        # a build from here. (Legacy wizard removed 2026-05; planner migration deferred.)
         return {
             "ok": True,
             "tool": "report_generation",
             "output": {
-                "reply": wizard_result.get("reply") or "",
+                "reply": "nf-core pipeline builds aren't available through the planner. "
+                         "Ask me directly (e.g. 'run rnaseq on these') and I'll build it.",
                 "saved_files": {},
-                "count": 1,
-                "wizard_started": True,
+                "count": 0,
             },
             "error": None,
         }
