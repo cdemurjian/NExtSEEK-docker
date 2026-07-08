@@ -19,6 +19,15 @@ def test_validate_resources_rejects_bad_values_falls_back():
     assert out == {"partition": "bcc", "time": "48:00:00", "cpus": "2", "mem": "8G"}
 
 
+def test_validate_resources_rejects_trailing_newline():
+    out = validate_resources({"partition": "bcc\n", "time": "12:00:00\n", "mem": "64G\n"})
+    assert out == {"partition": "bcc", "time": "48:00:00", "cpus": "2", "mem": "8G"}
+
+
+def test_validate_resources_non_dict_falls_back():
+    assert validate_resources(["not", "a", "dict"]) == {"partition": "bcc", "time": "48:00:00", "cpus": "2", "mem": "8G"}
+
+
 def test_sanitize_job_name_strips_shell_chars():
     assert sanitize_job_name("rnaseq; rm -rf /") == "rnaseq_rm_-rf"
     assert sanitize_job_name("") == "nfcore_run"

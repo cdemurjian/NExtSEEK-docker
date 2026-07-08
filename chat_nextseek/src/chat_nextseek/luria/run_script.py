@@ -2,7 +2,10 @@
 
 The template scaffold (module loads, conda activate, the nextflow invocation
 shape) is fixed; only a bounded, validated set of resource/identity slots are
-substituted. The LLM may propose resources but never injects shell.
+substituted. Only the resource slots (partition/time/cpus/mem) are LLM-proposed,
+and each is validated against a strict allow-list before use. `pipeline`,
+`revision`, `work_dir`, and `singularity_cache` come from trusted catalog/config
+sources, not LLM free-text.
 """
 from __future__ import annotations
 
@@ -12,9 +15,9 @@ from pathlib import Path
 DEFAULT_RESOURCES = {"partition": "bcc", "time": "48:00:00", "cpus": "2", "mem": "8G"}
 
 _RES_PATTERNS = {
-    "partition": re.compile(r"^[A-Za-z0-9_-]{1,32}$"),
-    "time": re.compile(r"^\d{1,3}:\d{2}:\d{2}$"),
-    "mem": re.compile(r"^\d{1,4}[GM]$"),
+    "partition": re.compile(r"[A-Za-z0-9_-]{1,32}"),
+    "time": re.compile(r"\d{1,3}:\d{2}:\d{2}"),
+    "mem": re.compile(r"\d{1,4}[GM]"),
 }
 _JOB_NAME_STRIP = re.compile(r"[^A-Za-z0-9_.-]+")
 
@@ -23,11 +26,11 @@ _TEMPLATE = Path(__file__).parent / "templates" / "run.sh.tmpl"
 
 def validate_resources(resources: dict | None) -> dict:
     """Return a full resource dict; each field taken from `resources` only if valid, else default."""
-    resources = resources or {}
+    resources = resources if isinstance(resources, dict) else {}
     out = dict(DEFAULT_RESOURCES)
     for key in ("partition", "time", "mem"):
         val = resources.get(key)
-        if val is not None and _RES_PATTERNS[key].match(str(val)):
+        if val is not None and _RES_PATTERNS[key].fullmatch(str(val)):
             out[key] = str(val)
     try:
         cpus = int(resources.get("cpus"))
