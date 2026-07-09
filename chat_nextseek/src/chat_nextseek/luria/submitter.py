@@ -26,7 +26,8 @@ _REQUIRED_ENV = ("user", "key", "working_path", "host")
 
 
 def submit_luria(launch_yml_path, *, luria_env: dict, resources: dict | None = None,
-                 job_name: str | None = None, cwd=None) -> list[dict]:
+                 job_name: str | None = None, samplesheet_local: str | None = None,
+                 cwd=None) -> list[dict]:
     """Submit each launch.yml entry to Luria via ssh+sbatch. Returns run refs (empty on any skip)."""
     launch_path = Path(launch_yml_path).resolve()
     if not launch_path.exists():
@@ -53,7 +54,8 @@ def submit_luria(launch_yml_path, *, luria_env: dict, resources: dict | None = N
             if not isinstance(entry, dict):
                 continue
             try:
-                ref = _submit_one(entry, idx, parent, working, luria_env, resources, job_name, key_path)
+                ref = _submit_one(entry, idx, parent, working, luria_env, resources, job_name, key_path,
+                                  samplesheet_local)
                 if ref:
                     runs.append(ref)
             except Exception as exc:
@@ -66,7 +68,8 @@ def submit_luria(launch_yml_path, *, luria_env: dict, resources: dict | None = N
     return runs
 
 
-def _submit_one(entry, idx, parent, working, luria_env, resources, job_name, key_path):
+def _submit_one(entry, idx, parent, working, luria_env, resources, job_name, key_path,
+                samplesheet_local=None):
     name = (entry.get("name") or f"run{idx}").strip() or f"run{idx}"
     pipeline = entry.get("pipeline")
     revision = entry.get("revision")
@@ -88,11 +91,20 @@ def _submit_one(entry, idx, parent, working, luria_env, resources, job_name, key
     remote_samplesheet = f"{remote_run_dir}/samplesheet.csv"
 
     params = _yaml.safe_load(params_local.read_text(encoding="utf-8")) or {}
-    samplesheet_local = params.get("input")
-    if not samplesheet_local or not Path(samplesheet_local).exists():
-        print(f"[LURIA][SUBMIT] samplesheet not found for entry {name!r}: {samplesheet_local}")
+    # The Tower emitter writes params["input"]/["outdir"] as SEQERA_WORK_BUCKET paths
+    # (e.g. /orcd/...), which are not present on the container or on Luria. Use the known
+    # local samplesheet from the caller (falling back to one co-located with the artifacts),
+    # and remap both input and outdir to the Luria run's filesystem.
+    local_sheet = samplesheet_local
+    if not local_sheet or not Path(local_sheet).exists():
+        candidate = params_local.parent / "samplesheet.csv"
+        if candidate.exists():
+            local_sheet = str(candidate)
+    if not local_sheet or not Path(local_sheet).exists():
+        print(f"[LURIA][SUBMIT] local samplesheet not found for entry {name!r}: {local_sheet!r}")
         return None
-    params["input"] = remote_samplesheet  # nextflow reads the remote copy
+    params["input"] = remote_samplesheet
+    params["outdir"] = f"{working}/results/{safe}_{run_id}"
 
     params_tmp = run_tmp = None
     try:
@@ -111,7 +123,7 @@ def _submit_one(entry, idx, parent, working, luria_env, resources, job_name, key
         ssh_run(luria_env, f"mkdir -p {remote_run_dir} {work_dir}", key_path=key_path)
         scp_file(luria_env, run_tmp, f"{remote_run_dir}/run.sh", key_path=key_path)
         scp_file(luria_env, params_tmp, f"{remote_run_dir}/params.yml", key_path=key_path)
-        scp_file(luria_env, samplesheet_local, remote_samplesheet, key_path=key_path)
+        scp_file(luria_env, local_sheet, remote_samplesheet, key_path=key_path)
         out = ssh_run(luria_env, f"cd {remote_run_dir} && sbatch run.sh", key_path=key_path)
     finally:
         for f in (params_tmp, run_tmp):

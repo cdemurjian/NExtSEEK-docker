@@ -549,11 +549,13 @@ def tool_submit_to_luria(config: "ChatConfig", state: dict, tool_input: dict | N
         return json.dumps({"ok": False, "message": f"Luria not configured. Samplesheet/launch is at {launch}. "
                                                    "Set LURIA_USER / LURIAKEY / LURIA_WORKING_PATH."})
     luria_env = dict(getattr(config, "LURIA_ENV", {}) or {})
+    samplesheet = artifacts.get("samplesheet")
     tool_input = tool_input or {}
     try:
         runs = submit_luria(launch, luria_env=luria_env,
                             resources=tool_input.get("resources"),
-                            job_name=tool_input.get("job_name"))
+                            job_name=tool_input.get("job_name"),
+                            samplesheet_local=samplesheet)
     except Exception as exc:
         return json.dumps({"ok": False, "message": f"Luria submit failed: {exc!r}"})
     if not runs:

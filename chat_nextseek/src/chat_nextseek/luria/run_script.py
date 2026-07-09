@@ -21,6 +21,24 @@ _RES_PATTERNS = {
 }
 _JOB_NAME_STRIP = re.compile(r"[^A-Za-z0-9_.-]+")
 
+_REVISION_RE = re.compile(r"[A-Za-z0-9._/-]{1,64}")
+_PIPELINE_RE = re.compile(r"[A-Za-z0-9._:/-]{1,200}")
+
+
+def validate_revision(revision: str) -> str:
+    """Allow-list a pipeline revision; raise ValueError on anything shell-unsafe (fail-closed)."""
+    if not revision or not _REVISION_RE.fullmatch(str(revision)):
+        raise ValueError(f"invalid pipeline revision {revision!r}")
+    return str(revision)
+
+
+def validate_pipeline(pipeline: str) -> str:
+    """Allow-list a pipeline name/URL; raise ValueError on anything shell-unsafe (fail-closed)."""
+    if not pipeline or not _PIPELINE_RE.fullmatch(str(pipeline)):
+        raise ValueError(f"invalid pipeline {pipeline!r}")
+    return str(pipeline)
+
+
 _TEMPLATE = Path(__file__).parent / "templates" / "run.sh.tmpl"
 
 
@@ -50,6 +68,8 @@ def sanitize_job_name(name: str, fallback: str = "nfcore_run") -> str:
 def render_run_script(*, job_name: str, pipeline: str, revision: str,
                       work_dir: str, singularity_cache: str, resources: dict | None) -> str:
     """Substitute the validated slots into the fixed run.sh template."""
+    revision = validate_revision(revision)
+    pipeline = validate_pipeline(pipeline)
     res = validate_resources(resources)
     mapping = {
         "JOB_NAME": sanitize_job_name(job_name),

