@@ -7,6 +7,17 @@ import nextseek_api.services.assistant as assistant_svc
 _URL = "/nextseek_api/assistant/pipeline/"
 
 
+@pytest.fixture(autouse=True)
+def _allow_participating(monkeypatch):
+    # AssistantViewSet gates on UserInParticipatingProject, whose real check
+    # calls out to SEEK (get_current_person). Patch it True so the tests exercise
+    # the endpoint logic, mirroring test_granular_endpoints.py's setUp.
+    monkeypatch.setattr(
+        assistant_svc.UserInParticipatingProject, "has_permission",
+        lambda self, request, view: True,
+    )
+
+
 @pytest.mark.django_db
 def test_pipeline_endpoint_seeds_session(monkeypatch):
     User = get_user_model()
