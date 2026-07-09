@@ -101,6 +101,7 @@ def render_run_script(*, job_name: str, pipeline: str, revision: str, run_dir: s
     mapping = {
         "JOB_NAME": sanitize_job_name(job_name),
         "CPUS": res["cpus"],
+        "PARTITION": res["partition"],
         "RUN_DIR": run_dir,
         "PIPELINE": pipeline,
         "REVISION": revision,

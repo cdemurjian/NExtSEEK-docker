@@ -44,6 +44,7 @@ def test_render_substitutes_all_slots_and_no_tokens_left():
     )
     assert "#SBATCH --job-name=nfcore_rnaseq" in script
     assert "#SBATCH -n 16" in script                      # default cpus
+    assert "#SBATCH -p bcc" in script                     # default partition (not the busy 'normal')
     assert "#SBATCH --mail-user=cdemu@mit.edu" in script
     assert "#SBATCH --output=/net/x/runs/nfcore_rnaseq_260709/nfcore_rnaseq.out" in script
     assert "conda activate cdemu_nfcore" in script
@@ -57,6 +58,8 @@ def test_render_substitutes_all_slots_and_no_tokens_left():
     assert "-w /net/x/work/nfcore_rnaseq" in script
     assert "export NXF_SINGULARITY_CACHEDIR=/net/x/singularity_cache" in script
     assert "export NXF_SYNTAX_PARSER=v1" in script        # legacy parser for nf-core configs
+    # CA bundle for singularity TLS (compute nodes lack the Let's Encrypt root)
+    assert 'export SSL_CERT_FILE="$(dirname /net/x/singularity_cache)/certs/ca-bundle.crt"' in script
     assert "{{" not in script and "}}" not in script
 
 

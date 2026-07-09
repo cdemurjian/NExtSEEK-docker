@@ -295,11 +295,24 @@ def tool_resolve_samples(config: "ChatConfig", session, state: dict, tool_input:
     all_uids: set[str] = set()
     all_accs: set[str] = set()
     species_votes: Counter = Counter()
+    file_paths_by_acc: dict[str, dict] = {}
     for leaf in leaves:
         accs = extract_accessions_from_metadata(leaf.get("metadata") or {})
         all_uids.add(leaf["uid"])
         all_accs.update(accs)
         flat = _flatten_lineage(leaf["uid"], uid_index) if uid_index else (leaf.get("metadata") or {})
+        # Capture curated local fastq paths (File_PrimaryData=R1, File_SecondaryData=R2), keyed by
+        # accession (the emitter's lookup key), so the emitter can prefer them over a synthesized
+        # ENA URL. ENA stays the fallback when these are empty.
+        _meta = leaf.get("metadata") or {}
+        _fp = flat.get("File_PrimaryData") or _meta.get("File_PrimaryData")
+        _fs = flat.get("File_SecondaryData") or _meta.get("File_SecondaryData")
+        if _fp or _fs:
+            for _a in accs:
+                file_paths_by_acc[str(_a).strip()] = {
+                    "File_PrimaryData": _fp or "",
+                    "File_SecondaryData": _fs or "",
+                }
         # Generically detect species: any flattened value that maps to a reference
         # bundle is a species vote (no hardcoded field name).
         for val in flat.values():
@@ -323,6 +336,8 @@ def tool_resolve_samples(config: "ChatConfig", session, state: dict, tool_input:
         "uids": sorted(set(prev.get("uids") or []) | all_uids),
         "accessions": sorted(set(prev.get("accessions") or []) | all_accs),
     }
+    # Merge curated fastq paths across resolve_samples calls; the emitter reads this in write_samplesheet.
+    state["accession_file_paths"] = {**(state.get("accession_file_paths") or {}), **file_paths_by_acc}
     detected_species = species_votes.most_common(1)[0][0] if species_votes else None
     bundle_key = resolve_bundle_for_species(detected_species)
     # Write unconditionally so this resolution's detection (incl. None) replaces any
@@ -428,6 +443,7 @@ def tool_write_samplesheet(config: "ChatConfig", state: dict, tool_input: dict, 
         pipeline=pipeline_key,
         samplesheet_rows=merged_rows,
         resolutions=resolutions,
+        accession_metadata=state.get("accession_file_paths") or {},
         launch_plan=None,  # configure_run now owns params.yml + launch.yml
         tower_env=tower_env,
         selector_rationale="full-agentic pipeline_agent build",

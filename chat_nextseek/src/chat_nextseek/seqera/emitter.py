@@ -223,7 +223,9 @@ def _coerce_csv(value: Any) -> str:
 def _write_csv(path: Path, rows: Sequence[Mapping[str, Any]], columns: Sequence[str]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", encoding="utf-8", newline="") as fh:
-        writer = csv.DictWriter(fh, fieldnames=list(columns), extrasaction="ignore")
+        # lineterminator="\n": csv defaults to CRLF, which leaves a stray \r on the last
+        # column; nf-core samplesheets want plain LF.
+        writer = csv.DictWriter(fh, fieldnames=list(columns), extrasaction="ignore", lineterminator="\n")
         writer.writeheader()
         for row in rows:
             writer.writerow({c: _coerce_csv(row.get(c)) for c in columns})
@@ -545,8 +547,10 @@ def emit_nfcore_artifacts(
                 rewritten = dict(row)
                 rewritten["accession"] = acc_str
                 rewritten["run_accession"] = run.run_accession
-                rewritten["fastq_1"] = run.fastq_1 or ""
-                rewritten["fastq_2"] = run.fastq_2 or ""
+                # Curated local fastq paths (File_PrimaryData=R1, File_SecondaryData=R2) win when
+                # present; otherwise fall back to the synthesized ENA URL (option A).
+                rewritten["fastq_1"] = sample_meta.get("File_PrimaryData") or run.fastq_1 or ""
+                rewritten["fastq_2"] = sample_meta.get("File_SecondaryData") or run.fastq_2 or ""
                 if run.layout and "library_layout" not in rewritten:
                     rewritten["library_layout"] = run.layout
                 # Stamp enrichment columns from the source metadata. The LLM is

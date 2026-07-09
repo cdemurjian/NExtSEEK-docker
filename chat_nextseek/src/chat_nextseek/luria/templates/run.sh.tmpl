@@ -1,6 +1,7 @@
 #!/bin/bash
 #SBATCH -N 1
 #SBATCH -n {{CPUS}}
+#SBATCH -p {{PARTITION}}
 #SBATCH --mail-type=END
 #SBATCH --mail-user=cdemu@mit.edu
 #SBATCH --job-name={{JOB_NAME}}
@@ -18,6 +19,13 @@ export NXF_SINGULARITY_CACHEDIR={{SINGULARITY_CACHE}}
 # default in Nextflow 25.x+ rejects ("Variable declarations cannot be mixed with
 # config statements"). Force the v1 (legacy) language parser so they parse.
 export NXF_SYNTAX_PARSER=v1
+
+# Luria compute nodes ship a CA bundle missing the Let's Encrypt root (ISRG Root
+# X1), so singularity can't verify depot.galaxyproject.org TLS and container
+# pulls die with "x509: certificate signed by unknown authority". Point it at a
+# current bundle staged on shared storage ({WORKING_PATH}/certs/ca-bundle.crt,
+# beside the singularity cache).
+export SSL_CERT_FILE="$(dirname {{SINGULARITY_CACHE}})/certs/ca-bundle.crt"
 
 cd {{RUN_DIR}}
 
