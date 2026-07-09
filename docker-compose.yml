@@ -17,7 +17,7 @@ services:
       - ./dmac/local_settings.py:/app/dmac/local_settings.py:z
       - ./outputs:/app/outputs:z
       - ./logs:/app/logs:z
-      - ${LURIAKEY}:${LURIAKEY}:ro
+      - ${LURIAKEY:-/dev/null}:${LURIAKEY:-/dev/null}:ro
       - nextseek-luria-ssh:/app/.ssh
       # Additive (Container-CC route): lets the assistant worker spawn sibling
       # `claude` containers on the host Docker daemon. Used only by the new
@@ -294,3 +294,4 @@ volumes:
   dmac-cc-users:
     external: true
   nextseek-luria-ssh:
+    name: ${INSTANCE_PREFIX:-}nextseek-luria-ssh

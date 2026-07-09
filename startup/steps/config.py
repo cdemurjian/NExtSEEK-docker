@@ -119,7 +119,19 @@ def render_root_env(repo_root: Path, compose_env: Mapping[str, str]) -> Path:
         "NEO4J_HTTP_PORT",
         "NEO4J_BOLT_PORT",
         "INSTANCE_PREFIX",
+        "LURIAKEY",
     ]
+    # LURIAKEY defaults to empty so every reset/install writes a concrete
+    # LURIAKEY= line here, and docker-compose.yml's
+    # `${LURIAKEY:-/dev/null}` mount substitution always has this file's
+    # value to resolve against instead of depending on the var being
+    # entirely absent vs. explicitly empty.
+    defaults = {"LURIAKEY": ""}
     output = repo_root / ".env"
-    write_env(output, {key: compose_env[key] for key in ordered_keys if key in compose_env})
+    values = {
+        key: (compose_env[key] if key in compose_env else defaults[key])
+        for key in ordered_keys
+        if key in compose_env or key in defaults
+    }
+    write_env(output, values)
     return output

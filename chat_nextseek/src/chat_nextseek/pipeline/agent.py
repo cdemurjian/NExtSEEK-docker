@@ -108,7 +108,9 @@ def _run_loop(session, config: "ChatConfig", *, log_dir: str | None) -> dict[str
                 "reply": "The pipeline agent needs a tool-capable (Bedrock) model. "
                          "It isn't configured in this profile — set AWS_BEARER_TOKEN_BEDROCK or use an anth/aws profile."}
 
-    system_prompt = config._load_prompt("pipeline_agent.txt").replace("{catalog}", catalog_for_prompt())
+    system_prompt = (config._load_prompt("pipeline_agent.txt")
+                     .replace("{catalog}", catalog_for_prompt())
+                     .replace("{launch_mode}", str(getattr(config, "PIPELINE_LAUNCH_MODE", "tower"))))
     messages = state["messages"]
     log_resolved_dir = log_dir or getattr(config, "LOG_DIR", ".")
 

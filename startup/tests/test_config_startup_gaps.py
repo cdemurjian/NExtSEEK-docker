@@ -71,4 +71,23 @@ def test_render_root_env_writes_compose_targeting_vars_only(tmp_path: Path) -> N
         "NEO4J_HTTP_PORT": "7475",
         "NEO4J_BOLT_PORT": "7688",
         "INSTANCE_PREFIX": "test-",
+        "LURIAKEY": "",
     }
+
+
+def test_render_root_env_defaults_luriakey_empty_when_absent(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+
+    render_root_env(repo, {"COMPOSE_PROJECT_NAME": "nextseek-test"})
+
+    rendered = read_env(repo / ".env")
+    assert rendered["LURIAKEY"] == ""
+
+
+def test_render_root_env_passes_through_luriakey_when_present(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+
+    render_root_env(repo, {"COMPOSE_PROJECT_NAME": "nextseek-test", "LURIAKEY": "/home/user/keys/luria"})
+
+    rendered = read_env(repo / ".env")
+    assert rendered["LURIAKEY"] == "/home/user/keys/luria"
