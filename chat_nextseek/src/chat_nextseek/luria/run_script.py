@@ -1,18 +1,18 @@
-"""Render the Luria SLURM run.sh from a fixed template + validated resource slots.
+"""Render the Luria SLURM run.sh from a fixed template + validated slots.
 
-The template scaffold (module loads, conda activate, the nextflow invocation
-shape) is fixed; only a bounded, validated set of resource/identity slots are
-substituted. Only the resource slots (partition/time/cpus/mem) are LLM-proposed,
-and each is validated against a strict allow-list before use. `pipeline`,
-`revision`, `work_dir`, and `singularity_cache` come from trusted catalog/config
-sources, not LLM free-text.
+The template scaffold (SBATCH directives, module loads, conda activate, the
+nextflow invocation) is fixed; only bounded, validated slots are substituted.
+`cpus` (the only LLM-proposed resource that reaches the template) is validated
+against a strict allow-list; `pipeline`/`revision` are allow-listed fail-closed;
+`run_dir`/`work_dir`/`singularity_cache` come from trusted config
+(LURIA_WORKING_PATH + a sanitized run name), not LLM free-text.
 """
 from __future__ import annotations
 
 import re
 from pathlib import Path
 
-DEFAULT_RESOURCES = {"partition": "bcc", "time": "48:00:00", "cpus": "2", "mem": "8G"}
+DEFAULT_RESOURCES = {"partition": "bcc", "time": "48:00:00", "cpus": "16", "mem": "8G"}
 
 _RES_PATTERNS = {
     "partition": re.compile(r"[A-Za-z0-9_-]{1,32}"),
@@ -65,7 +65,7 @@ def sanitize_job_name(name: str, fallback: str = "nfcore_run") -> str:
     return cleaned or fallback
 
 
-def render_run_script(*, job_name: str, pipeline: str, revision: str,
+def render_run_script(*, job_name: str, pipeline: str, revision: str, run_dir: str,
                       work_dir: str, singularity_cache: str, resources: dict | None) -> str:
     """Substitute the validated slots into the fixed run.sh template."""
     revision = validate_revision(revision)
@@ -73,10 +73,8 @@ def render_run_script(*, job_name: str, pipeline: str, revision: str,
     res = validate_resources(resources)
     mapping = {
         "JOB_NAME": sanitize_job_name(job_name),
-        "PARTITION": res["partition"],
-        "TIME": res["time"],
         "CPUS": res["cpus"],
-        "MEM": res["mem"],
+        "RUN_DIR": run_dir,
         "PIPELINE": pipeline,
         "REVISION": revision,
         "WORK_DIR": work_dir,

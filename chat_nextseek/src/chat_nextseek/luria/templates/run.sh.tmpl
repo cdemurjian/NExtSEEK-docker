@@ -1,22 +1,31 @@
 #!/bin/bash
+#SBATCH -N 1
+#SBATCH -n {{CPUS}}
+#SBATCH --mail-type=END
+#SBATCH --mail-user=cdemu@mit.edu
 #SBATCH --job-name={{JOB_NAME}}
-#SBATCH --partition={{PARTITION}}
-#SBATCH --output=nf-%j.out
-#SBATCH --time={{TIME}}
-#SBATCH --cpus-per-task={{CPUS}}
-#SBATCH --mem={{MEM}}
+#SBATCH --output={{RUN_DIR}}/{{JOB_NAME}}.out
+#SBATCH --error={{RUN_DIR}}/{{JOB_NAME}}.err
 
-set -euo pipefail
-
-module load singularity/3.10.4
+module add miniconda3/v4
 source /home/software/conda/miniconda3/etc/profile.d/conda.sh
-conda activate nextflow
+conda activate cdemu_nfcore
+module add singularity/3.10.4
 
 export NXF_SINGULARITY_CACHEDIR={{SINGULARITY_CACHE}}
 
-nextflow run {{PIPELINE}} \
-    -r {{REVISION}} \
-    -profile slurm,singularity \
-    -params-file params.yml \
+cd {{RUN_DIR}}
+
+# NOTE: --genome/--aligner/--save_* below are rnaseq-shaped for the first working
+# run; generalize to curated params.yml per-pipeline in a later pass.
+nextflow run {{PIPELINE}} -r {{REVISION}} -profile singularity \
+    --input samplesheet.csv \
+    --outdir . \
+    --genome GRCh38 \
+    --aligner star_salmon \
+    --save_reference \
+    --save_trimmed \
     -w {{WORK_DIR}} \
     -resume
+
+conda deactivate
