@@ -87,6 +87,27 @@ def start(session, config: "ChatConfig", *, user_query: str, parser_plan: Any, r
     return _run_loop(session, config, log_dir=log_dir)
 
 
+def start_from_cohort(session, config: "ChatConfig", *, uids: list[str], pipeline_key: str,
+                      user_query: str = "", log_dir: str | None = None) -> dict[str, Any]:
+    """Launch a pipeline conversation pre-seeded with an explicit cohort.
+
+    Bridge entry for the Container-CC handoff: instead of resolving a cohort from
+    a pinned bundle (see ``start``), seed ``resolved.uids`` + ``pipeline_key``
+    directly from a CC-resolved UID list, then run one loop so the caller can
+    return the wizard's opening message.
+    """
+    state = {
+        "active": True,
+        "messages": [{"role": "user",
+                      "content": user_query or f"Launch {pipeline_key} on these samples."}],
+        "resolved": {"uids": list(uids), "accessions": []},
+        "artifacts": {},
+        "pipeline_key": pipeline_key,
+    }
+    _save(session, state)
+    return _run_loop(session, config, log_dir=log_dir)
+
+
 def handle_turn(session, config: "ChatConfig", user_text: str, *, log_dir: str | None = None) -> dict[str, Any]:
     state = _state(session)
     if not state.get("active"):
