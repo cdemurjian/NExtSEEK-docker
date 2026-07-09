@@ -227,6 +227,33 @@ def _dispatch_generate_submission(args):
         _err(e.code, e.message, e.exit_code)  # pragma: no cover
 
 
+def _dispatch_pipeline(args):
+    """Seed NS pipeline_agent from a CC-resolved cohort (bridge op)."""
+    import os
+    import _assistant_client as ac  # pragma: no cover
+    import httpx  # pragma: no cover
+    session_id = os.environ.get("NEXTSEEK_CHAT_SESSION_ID")
+    if not session_id:
+        _err("CONFIG_MISSING", "NEXTSEEK_CHAT_SESSION_ID not set (need a chat session to seed)", 2)
+    if not args.uids:
+        _err("BAD_REQUEST", "missing --uids", 3)
+    if not args.pipeline:
+        _err("BAD_REQUEST", "missing --pipeline", 3)
+    client = ac.AssistantClient(  # pragma: no cover
+        base_url=os.environ["NEXTSEEK_URL"],
+        assistant_prefix=os.environ.get("NEXTSEEK_ASSISTANT_PREFIX", "nextseek_api/assistant"),
+        auth=(_api_user(), _api_pass()),
+    )
+    try:  # pragma: no cover
+        return client.launch_pipeline(session_id=session_id, uids=args.uids, pipeline=args.pipeline)
+    except httpx.HTTPStatusError as e:  # pragma: no cover
+        if e.response.status_code == 401:
+            _err("AUTH_FAILED", "authentication failed (check NS credentials)", 8)
+        _err("AGENT_FAILED", f"HTTP {e.response.status_code}: {e.response.text}", 4)
+    except httpx.TransportError as e:  # pragma: no cover
+        _err("TRANSPORT_ERROR", f"viewset unreachable: {type(e).__name__}", 7)
+
+
 def _dispatch_query(args):
     """Single-shot orchestrator via the NExtSEEK assistant viewset.
 
@@ -259,6 +286,7 @@ _DISPATCH = {
     "graph": _dispatch_graph,
     "report": _dispatch_report,
     "generate-submission": _dispatch_generate_submission,
+    "pipeline": _dispatch_pipeline,
 }
 
 
@@ -272,6 +300,7 @@ def main() -> None:
     p.add_argument("--project")  # for report
     p.add_argument("--type")  # for generate-submission
     p.add_argument("--uids")  # for generate-submission
+    p.add_argument("--pipeline")  # for pipeline (nf-core key)
     p.add_argument("--planner", action="store_true",  # for query
                    help="Use run_query_plan instead of run_query (multi-step capable)")
     args = p.parse_args()

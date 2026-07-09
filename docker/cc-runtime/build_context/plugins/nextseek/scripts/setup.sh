@@ -13,6 +13,7 @@ ALLOW='[
   "Bash(nextseek-entity-extract:*)",
   "Bash(nextseek-parse:*)",
   "Bash(nextseek-plan:*)",
+  "Bash(nextseek-pipeline:*)",
   "Bash(nextseek-api-read --parser-plan*)",
   "Bash(nextseek-graph:*)",
   "Bash(nextseek-report --mode samples*)",

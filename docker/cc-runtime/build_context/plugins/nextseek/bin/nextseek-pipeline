@@ -1,0 +1,30 @@
+#!/bin/sh
+# nextseek-pipeline — hand a CC-resolved sample cohort to NS pipeline_agent.
+# Seeds the pipeline wizard for THIS chat session; the interactive confirm/launch
+# turns then run on the NS route. Read-only w.r.t. NExtSEEK data (no writes here).
+set -eu
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+. "$SCRIPT_DIR/_nextseek_common.sh"
+
+UIDS=""
+PIPELINE=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --uids) UIDS="$2"; shift 2 ;;
+    --uids=*) UIDS="${1#--uids=}"; shift ;;
+    --pipeline) PIPELINE="$2"; shift 2 ;;
+    --pipeline=*) PIPELINE="${1#--pipeline=}"; shift ;;
+    --help)
+      echo "Usage: nextseek-pipeline --uids \"UID1,UID2,...\" --pipeline <nf-core key>"
+      echo ""
+      echo "Hands the resolved sample cohort to the NExtSEEK pipeline agent and"
+      echo "starts the launch wizard. Continue in chat to confirm genome/params."
+      exit 0
+      ;;
+    *) nextseek_die 3 "unknown arg: $1" ;;
+  esac
+done
+[ -n "$UIDS" ] || nextseek_die 3 "missing --uids"
+[ -n "$PIPELINE" ] || nextseek_die 3 "missing --pipeline"
+
+exec python "$SCRIPT_DIR/_nextseek_runner.py" --agent pipeline --uids "$UIDS" --pipeline "$PIPELINE"
