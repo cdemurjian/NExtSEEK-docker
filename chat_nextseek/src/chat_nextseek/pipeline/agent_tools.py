@@ -550,12 +550,16 @@ def tool_submit_to_luria(config: "ChatConfig", state: dict, tool_input: dict | N
                                                    "Set LURIA_USER / LURIAKEY / LURIA_WORKING_PATH."})
     luria_env = dict(getattr(config, "LURIA_ENV", {}) or {})
     samplesheet = artifacts.get("samplesheet")
+    # Thread the species-resolved iGenomes key (mouse->GRCm39, human->GRCh38) that configure_run
+    # computed, so run.sh aligns to the right genome instead of a hardcoded GRCh38.
+    genome = ((state.get("launch_plan") or {}).get("params") or {}).get("genome")
     tool_input = tool_input or {}
     try:
         runs = submit_luria(launch, luria_env=luria_env,
                             resources=tool_input.get("resources"),
                             job_name=tool_input.get("job_name"),
-                            samplesheet_local=samplesheet)
+                            samplesheet_local=samplesheet,
+                            genome=genome)
     except Exception as exc:
         return json.dumps({"ok": False, "message": f"Luria submit failed: {exc!r}"})
     if not runs:

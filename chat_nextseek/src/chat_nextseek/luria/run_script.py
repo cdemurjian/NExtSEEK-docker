@@ -3,7 +3,8 @@
 The template scaffold (SBATCH directives, module loads, conda activate, the
 nextflow invocation) is fixed; only bounded, validated slots are substituted.
 `cpus` (the only LLM-proposed resource that reaches the template) is validated
-against a strict allow-list; `pipeline`/`revision` are allow-listed fail-closed;
+against a strict allow-list; `pipeline`/`revision`/`genome` are allow-listed
+fail-closed (`genome` is the species-resolved iGenomes key, NOT hardcoded);
 `run_dir`/`work_dir`/`singularity_cache` come from trusted config
 (LURIA_WORKING_PATH + a sanitized run name), not LLM free-text.
 """
@@ -39,6 +40,16 @@ def validate_pipeline(pipeline: str) -> str:
     return str(pipeline)
 
 
+_GENOME_RE = re.compile(r"[A-Za-z0-9_.-]{1,64}")
+
+
+def validate_genome(genome: str) -> str:
+    """Allow-list an iGenomes key (e.g. GRCh38, GRCm39); raise on anything shell-unsafe (fail-closed)."""
+    if not genome or not _GENOME_RE.fullmatch(str(genome)):
+        raise ValueError(f"invalid genome {genome!r}")
+    return str(genome)
+
+
 _TEMPLATE = Path(__file__).parent / "templates" / "run.sh.tmpl"
 
 
@@ -66,10 +77,12 @@ def sanitize_job_name(name: str, fallback: str = "nfcore_run") -> str:
 
 
 def render_run_script(*, job_name: str, pipeline: str, revision: str, run_dir: str,
-                      work_dir: str, singularity_cache: str, resources: dict | None) -> str:
+                      work_dir: str, singularity_cache: str, genome: str,
+                      resources: dict | None) -> str:
     """Substitute the validated slots into the fixed run.sh template."""
     revision = validate_revision(revision)
     pipeline = validate_pipeline(pipeline)
+    genome = validate_genome(genome)
     res = validate_resources(resources)
     mapping = {
         "JOB_NAME": sanitize_job_name(job_name),
@@ -77,6 +90,7 @@ def render_run_script(*, job_name: str, pipeline: str, revision: str, run_dir: s
         "RUN_DIR": run_dir,
         "PIPELINE": pipeline,
         "REVISION": revision,
+        "GENOME": genome,
         "WORK_DIR": work_dir,
         "SINGULARITY_CACHE": singularity_cache,
     }

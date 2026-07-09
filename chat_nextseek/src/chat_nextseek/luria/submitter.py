@@ -28,7 +28,7 @@ _REQUIRED_ENV = ("user", "key", "working_path", "host")
 
 def submit_luria(launch_yml_path, *, luria_env: dict, resources: dict | None = None,
                  job_name: str | None = None, samplesheet_local: str | None = None,
-                 cwd=None) -> list[dict]:
+                 genome: str | None = None, cwd=None) -> list[dict]:
     """Submit each launch.yml entry to Luria via ssh+sbatch. Returns run refs (empty on any skip)."""
     launch_path = Path(launch_yml_path).resolve()
     if not launch_path.exists():
@@ -56,7 +56,7 @@ def submit_luria(launch_yml_path, *, luria_env: dict, resources: dict | None = N
                 continue
             try:
                 ref = _submit_one(entry, idx, parent, working, luria_env, resources, job_name, key_path,
-                                  samplesheet_local)
+                                  samplesheet_local, genome)
                 if ref:
                     runs.append(ref)
             except Exception as exc:
@@ -70,7 +70,7 @@ def submit_luria(launch_yml_path, *, luria_env: dict, resources: dict | None = N
 
 
 def _submit_one(entry, idx, parent, working, luria_env, resources, job_name, key_path,
-                samplesheet_local=None):
+                samplesheet_local=None, genome=None):
     name = (entry.get("name") or f"run{idx}").strip() or f"run{idx}"
     pipeline = entry.get("pipeline")
     revision = entry.get("revision")
@@ -95,13 +95,19 @@ def _submit_one(entry, idx, parent, working, luria_env, resources, job_name, key
     remote_run_dir = f"{working}/runs/{safe}_{run_id}"
     work_dir = f"{working}/work/{safe}"
     cache_dir = f"{working}/singularity_cache"
+    # Genome is the species-resolved iGenomes key (mouse->GRCm39, human->GRCh38) threaded from
+    # configure_run; default to GRCh38 loudly rather than silently mis-aligning a non-human cohort.
+    run_genome = genome or "GRCh38"
+    if not genome:
+        print(f"[LURIA][SUBMIT] entry {name!r}: no resolved genome — defaulting to GRCh38 "
+              "(VERIFY the cohort is human before trusting results!)")
 
     # run.sh uses CLI flags (--input samplesheet.csv, --genome, ...) — no params-file.
     run_tmp = None
     try:
         run_sh = render_run_script(
             job_name=safe, pipeline=pipeline, revision=revision, run_dir=remote_run_dir,
-            work_dir=work_dir, singularity_cache=cache_dir, resources=resources,
+            work_dir=work_dir, singularity_cache=cache_dir, genome=run_genome, resources=resources,
         )
         fd, run_tmp = tempfile.mkstemp(prefix="run_", suffix=".sh")
         os.close(fd)

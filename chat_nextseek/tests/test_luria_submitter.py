@@ -126,3 +126,24 @@ def test_submit_luria_skips_entry_with_injected_revision(tmp_path, monkeypatch):
     _patch_transport(monkeypatch)
     runs = sub.submit_luria(str(tmp_path / "launch.yml"), luria_env=LE, samplesheet_local=str(real_sheet))
     assert runs == []  # injected revision -> render raises -> entry skipped, never launched
+
+
+def test_submit_luria_threads_genome_into_runsh(tmp_path, monkeypatch):
+    real_sheet = tmp_path / "samplesheet.csv"
+    real_sheet.write_text("sample,fastq_1\nA,a.fq.gz\n")
+    (tmp_path / "launch.yml").write_text(yaml.safe_dump({"launch": [{
+        "name": "nfcore_rnaseq", "pipeline": "nf-core/rnaseq", "revision": "3.16.1"}]}))
+    staged = {}
+    monkeypatch.setattr(sub, "prepare_key", lambda k: "/tmp/fake_key")
+    monkeypatch.setattr(sub, "ssh_run", lambda le, cmd, *, key_path: "Submitted batch job 3\n")
+
+    def fake_scp(le, local, remote, *, key_path):
+        if remote.endswith("/run.sh"):
+            staged["run_sh"] = Path(local).read_text()
+
+    monkeypatch.setattr(sub, "scp_file", fake_scp)
+    # a mouse cohort resolves to GRCm39 — must NOT align to human GRCh38
+    sub.submit_luria(str(tmp_path / "launch.yml"), luria_env=LE,
+                     samplesheet_local=str(real_sheet), genome="GRCm39")
+    assert "--genome GRCm39" in staged["run_sh"]
+    assert "GRCh38" not in staged["run_sh"]

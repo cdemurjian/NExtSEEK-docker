@@ -21,7 +21,7 @@ cd {{RUN_DIR}}
 nextflow run {{PIPELINE}} -r {{REVISION}} -profile singularity \
     --input samplesheet.csv \
     --outdir . \
-    --genome GRCh38 \
+    --genome {{GENOME}} \
     --aligner star_salmon \
     --save_reference \
     --save_trimmed \
