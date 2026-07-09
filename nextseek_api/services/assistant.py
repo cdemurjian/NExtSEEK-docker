@@ -1284,9 +1284,12 @@ class AssistantViewSet(viewsets.ViewSet):
 
         chat_config = _granular_chat_config(request, req)
         adapter = DictSessionAdapter(chat_session)
-        result = pipeline_agent.start_from_cohort(
-            adapter, chat_config, uids=req.uid_list(), pipeline_key=req.pipeline)
-        adapter.save()
+        try:
+            result = pipeline_agent.start_from_cohort(
+                adapter, chat_config, uids=req.uid_list(), pipeline_key=req.pipeline)
+            adapter.save()
+        except Exception as exc:  # noqa: BLE001
+            return _op_error_response("AGENT_FAILED", str(exc), status.HTTP_502_BAD_GATEWAY)
         return Response({
             "reply": result.get("reply", ""),
             "action": result.get("action"),

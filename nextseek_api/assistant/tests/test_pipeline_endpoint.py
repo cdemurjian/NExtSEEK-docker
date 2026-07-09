@@ -69,3 +69,20 @@ def test_pipeline_endpoint_rejects_foreign_session():
     resp = client.post(_URL, {"session_id": str(cs.session_id),
                               "uids": "MUS-1", "pipeline": "rnaseq"}, format="json")
     assert resp.status_code == 404
+
+
+@pytest.mark.django_db
+def test_pipeline_endpoint_agent_failure_returns_502(monkeypatch):
+    User = get_user_model()
+    user = User.objects.create_user("carol", password="x")
+    cs = ChatSession.objects.create(user=user)
+
+    def boom(session, config, *, uids, pipeline_key, **kw):
+        raise RuntimeError("bedrock down")
+    monkeypatch.setattr(assistant_svc.pipeline_agent, "start_from_cohort", boom)
+
+    client = APIClient()
+    client.force_authenticate(user=user)
+    resp = client.post(_URL, {"session_id": str(cs.session_id),
+                              "uids": "MUS-1,MUS-2", "pipeline": "rnaseq"}, format="json")
+    assert resp.status_code == 502

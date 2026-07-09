@@ -165,12 +165,14 @@ def _session_metas(user, current_id, paths, mem_cfg, project_dirname=None):
 def _decide_route(user, req, *, force_cc: bool, session=None) -> cc_router.RouteDecision:
     """Pick the route for a query, honoring the admin-only ``force_route`` override.
 
-    Precedence: an explicit ``cc/query/async`` (``force_cc``) or an admin's
-    ``force_route`` supersede the BAML router; a non-admin's ``force_route`` is
-    ignored and falls back to :func:`cc_router.decide` (mirrors ``use_prod``'s
-    server-side admin gate). Forced decisions are ``ROUTE_NS``/``ROUTE_CC``
-    (never ``ROUTE_UNRELATED``), so a forced query always runs on the chosen
-    path instead of hitting the out-of-scope canned reply.
+    Precedence: an explicit force (``force_cc`` or an admin's ``force_route``)
+    wins first, THEN an active ``pipeline_agent`` wizard forces the NS route,
+    THEN the BAML router (:func:`cc_router.decide`) decides. A non-admin's
+    ``force_route`` is ignored and falls back to the router (mirrors
+    ``use_prod``'s server-side admin gate). Forced decisions are
+    ``ROUTE_NS``/``ROUTE_CC`` (never ``ROUTE_UNRELATED``), so a forced query
+    always runs on the chosen path instead of hitting the out-of-scope canned
+    reply.
     """
     forced = getattr(req, "force_route", None)
     if forced in ("ns", "cc"):
