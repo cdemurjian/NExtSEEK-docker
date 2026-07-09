@@ -52,6 +52,20 @@ def validate_genome(genome: str) -> str:
 
 _TEMPLATE = Path(__file__).parent / "templates" / "run.sh.tmpl"
 
+_LURIA_CONFIG_TEMPLATE = Path(__file__).parent / "templates" / "luria.config.tmpl"
+_REFS_ROOT_RE = re.compile(r"[A-Za-z0-9_./-]{1,256}")
+
+
+def render_luria_config(refs_root: str) -> str:
+    """Render luria.config (the local reference-genomes map) from its template,
+    substituting REFS_ROOT := <LURIA_WORKING_PATH>/refs. `refs_root` is trusted
+    config (the Luria working_path), not LLM input, but is path-validated
+    fail-closed for defense in depth."""
+    if not refs_root or not _REFS_ROOT_RE.fullmatch(str(refs_root)):
+        raise ValueError(f"invalid refs_root {refs_root!r}")
+    text = _LURIA_CONFIG_TEMPLATE.read_text(encoding="utf-8")
+    return text.replace("{{REFS_ROOT}}", str(refs_root).rstrip("/"))
+
 
 def validate_resources(resources: dict | None) -> dict:
     """Return a full resource dict; each field taken from `resources` only if valid, else default."""

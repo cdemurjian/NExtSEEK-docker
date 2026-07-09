@@ -50,6 +50,32 @@ def test_tool_submit_to_luria_guards_missing_artifact():
     assert out["ok"] is False
 
 
+def _capture_luria(monkeypatch):
+    captured = {}
+    monkeypatch.setattr(at, "submit_luria",
+                        lambda launch, **kw: (captured.update(kw),
+                                              [{"job_id": "1", "remote_dir": "/d", "log": "/d/o", "run_name": "r"}])[1])
+    return captured
+
+
+def test_tool_submit_to_luria_threads_params_and_forces_gencode_for_gencode_ref(monkeypatch):
+    captured = _capture_luria(monkeypatch)
+    state = {"artifacts": {"launch": "/tmp/launch.yml", "samplesheet": "/tmp/s.csv"},
+             "launch_plan": {"params": {"genome": "GRCm39", "aligner": "star_salmon", "gencode": False}}}
+    at.tool_submit_to_luria(_Cfg(tower=False, luria=True), state, {})
+    assert captured["genome"] == "GRCm39"
+    assert captured["launch_params"]["aligner"] == "star_salmon"
+    assert captured["launch_params"]["gencode"] is True   # GRCm39 local refs are GENCODE -> forced on
+
+
+def test_tool_submit_to_luria_leaves_gencode_off_for_ensembl_macaque(monkeypatch):
+    captured = _capture_luria(monkeypatch)
+    state = {"artifacts": {"launch": "/tmp/launch.yml"},
+             "launch_plan": {"params": {"genome": "Mfas6.0", "aligner": "star_salmon", "gencode": False}}}
+    at.tool_submit_to_luria(_Cfg(tower=False, luria=True), state, {})
+    assert captured["launch_params"]["gencode"] is False  # Ensembl macaque -> stays off
+
+
 def test_existing_static_schema_unchanged():
     # Regression guard: the Tower-era constant still lists exactly the original five.
     assert {t["name"] for t in at.PIPELINE_TOOL_SCHEMAS} == {

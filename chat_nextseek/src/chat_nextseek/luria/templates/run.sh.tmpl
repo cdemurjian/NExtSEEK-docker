@@ -13,18 +13,25 @@ conda activate cdemu_nfcore
 module add singularity/3.10.4
 
 export NXF_SINGULARITY_CACHEDIR={{SINGULARITY_CACHE}}
+# Current nf-core pipelines (e.g. rnaseq 3.18.0) use the legacy Nextflow config
+# idiom (def vars mixed with config statements), which the strict parser that is
+# default in Nextflow 25.x+ rejects ("Variable declarations cannot be mixed with
+# config statements"). Force the v1 (legacy) language parser so they parse.
+export NXF_SYNTAX_PARSER=v1
 
 cd {{RUN_DIR}}
 
-# NOTE: --genome/--aligner/--save_* below are rnaseq-shaped for the first working
-# run; generalize to curated params.yml per-pipeline in a later pass.
+# Per-pipeline scientific params come from params.yml (built from the curated
+# per-pipeline JSON in reports/templates/nfcore/); local reference genomes come
+# from luria.config (-c). The CLI flags below (--input/--outdir/--genome)
+# override params.yml so the run uses the staged samplesheet, this run dir, and
+# the species-resolved genome key.
 nextflow run {{PIPELINE}} -r {{REVISION}} -profile singularity \
+    -c luria.config \
+    -params-file params.yml \
     --input samplesheet.csv \
     --outdir . \
     --genome {{GENOME}} \
-    --aligner star_salmon \
-    --save_reference \
-    --save_trimmed \
     -w {{WORK_DIR}} \
     -resume
 

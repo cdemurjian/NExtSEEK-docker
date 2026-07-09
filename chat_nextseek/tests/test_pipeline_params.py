@@ -25,10 +25,30 @@ def test_rnaseq_has_curated_params_and_reference_resources():
 def test_scrnaseq_has_curated_params_and_reference_resources():
     doc = _load("scrnaseq")
     params = doc["params"]
-    assert "alevin" in params["aligner"]["allowed"]
+    # simpleaf (alevin-fry) is the current nf-core/scrnaseq aligner value + default;
+    # the old "alevin" value is no longer valid upstream.
+    assert "simpleaf" in params["aligner"]["allowed"]
+    assert params["aligner"]["default"] == "simpleaf"
+    assert "alevin" not in params["aligner"]["allowed"]
     assert params["protocol"]["default"] == "auto"
+    # Seq-Well / Drop-seq bead chemistry: dropseq preset + explicit simpleaf geometry
+    # (12bp cell barcode + 8bp UMI on R1, cDNA on R2) both selectable via --protocol.
+    assert "dropseq" in params["protocol"]["allowed"]
+    assert "1{b[12]u[8]x:}2{r:}" in params["protocol"]["allowed"]
+    assert "barcode_whitelist" in params
+    assert doc["protocol_presets"]["seqwell"]["geometry"] == "1{b[12]u[8]x:}2{r:}"
     assert "expected_cells" not in params
     assert doc["reference_resources"] == ["fasta", "gtf", "salmon_index", "star_index", "txp2gene"]
+
+
+def test_gencode_for_genome_key():
+    from chat_nextseek.seqera.pipeline_params import gencode_for_genome_key
+    assert gencode_for_genome_key("GRCh38") is True     # GENCODE human
+    assert gencode_for_genome_key("GRCm39") is True     # GENCODE mouse
+    assert gencode_for_genome_key("Mfas6.0") is False   # Ensembl cynomolgus
+    assert gencode_for_genome_key("Mmul_10") is False   # Ensembl rhesus
+    assert gencode_for_genome_key(None) is False
+    assert gencode_for_genome_key("nonexistent") is False
 
 
 ALL_PIPELINES = ["rnaseq", "scrnaseq", "atacseq", "chipseq", "sarek", "methylseq", "ampliseq", "fetchngs"]

@@ -42,6 +42,22 @@ def resolve_bundle_for_species(species: str | None) -> str | None:
     return table.get(str(species).strip().lower())
 
 
+def gencode_for_genome_key(genome_key: str | None) -> bool:
+    """True if the bundle whose igenomes_key == genome_key is GENCODE-formatted.
+
+    Used by the Luria backend: its local reference genomes (luria.config) are
+    GENCODE GTFs for human/mouse but Ensembl for the macaques, so `--gencode`
+    must follow the genome. This is deliberately NOT applied on the Tower path,
+    where the same key resolves to (non-GENCODE) AWS iGenomes references.
+    """
+    if not genome_key:
+        return False
+    for bundle in (load_reference_bundles().get("bundles") or {}).values():
+        if bundle.get("igenomes_key") == genome_key:
+            return bool(bundle.get("gencode"))
+    return False
+
+
 def build_reference_params(pipeline_key: str, bundle_key: str | None) -> tuple[dict[str, Any], str]:
     """Return (reference_params, reference_status) for a pipeline + bundle.
 

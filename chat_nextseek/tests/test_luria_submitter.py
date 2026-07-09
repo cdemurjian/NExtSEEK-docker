@@ -41,9 +41,9 @@ def test_submit_luria_happy_path(tmp_path, monkeypatch):
     assert ref["log"].endswith("/nfcore_rnaseq.out")
     assert any(c.startswith("mkdir -p") for c in calls["ssh"])
     assert any("sbatch run.sh" in c for c in calls["ssh"])
-    # exactly two files staged now (no params.yml — run.sh drives everything via CLI flags)
+    # four files staged: run.sh + luria.config (-c) + params.yml (-params-file) + samplesheet
     remotes = {remote.rsplit("/", 1)[1] for _, remote in calls["scp"]}
-    assert remotes == {"run.sh", "samplesheet.csv"}
+    assert remotes == {"run.sh", "luria.config", "params.yml", "samplesheet.csv"}
 
 
 def test_submit_luria_stages_state_samplesheet_and_runsh_uses_cli_flags(tmp_path, monkeypatch):
@@ -126,6 +126,44 @@ def test_submit_luria_skips_entry_with_injected_revision(tmp_path, monkeypatch):
     _patch_transport(monkeypatch)
     runs = sub.submit_luria(str(tmp_path / "launch.yml"), luria_env=LE, samplesheet_local=str(real_sheet))
     assert runs == []  # injected revision -> render raises -> entry skipped, never launched
+
+
+def test_submit_luria_stages_params_yml_and_luria_config(tmp_path, monkeypatch):
+    real_sheet = tmp_path / "samplesheet.csv"
+    real_sheet.write_text("sample,fastq_1\nA,a.fq.gz\n")
+    (tmp_path / "launch.yml").write_text(yaml.safe_dump({"launch": [{
+        "name": "nfcore_rnaseq", "pipeline": "nf-core/rnaseq", "revision": "3.16.1"}]}))
+    staged = {}
+    monkeypatch.setattr(sub, "prepare_key", lambda k: "/tmp/fake_key")
+    monkeypatch.setattr(sub, "ssh_run", lambda le, cmd, *, key_path: "Submitted batch job 9\n")
+
+    def fake_scp(le, local, remote, *, key_path):
+        if remote.endswith("/params.yml"):
+            staged["params"] = Path(local).read_text()
+        elif remote.endswith("/luria.config"):
+            staged["config"] = Path(local).read_text()
+        elif remote.endswith("/run.sh"):
+            staged["run_sh"] = Path(local).read_text()
+
+    monkeypatch.setattr(sub, "scp_file", fake_scp)
+    sub.submit_luria(
+        str(tmp_path / "launch.yml"), luria_env=LE, samplesheet_local=str(real_sheet),
+        genome="GRCm39",
+        launch_params={"genome": "GRCm39", "input": "s3://bucket/x", "outdir": "/orcd/out",
+                       "aligner": "star_salmon", "gencode": True, "save_reference": True},
+    )
+    # run.sh wires both generated files in
+    assert "-c luria.config" in staged["run_sh"]
+    assert "-params-file params.yml" in staged["run_sh"]
+    # params.yml carries curated params but NOT the CLI-owned keys (input/outdir/genome)
+    params = yaml.safe_load(staged["params"])
+    assert params["aligner"] == "star_salmon"
+    assert params["gencode"] is True
+    assert params["save_reference"] is True
+    assert "genome" not in params and "input" not in params and "outdir" not in params
+    # luria.config resolved REFS_ROOT under the Luria working path (LE working_path=/net/x)
+    assert "/net/x/refs/GRCm39.primary_assembly.genome.fa.gz" in staged["config"]
+    assert "{{REFS_ROOT}}" not in staged["config"]
 
 
 def test_submit_luria_threads_genome_into_runsh(tmp_path, monkeypatch):

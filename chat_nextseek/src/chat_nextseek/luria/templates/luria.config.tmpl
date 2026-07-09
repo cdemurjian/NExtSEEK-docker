@@ -1,0 +1,37 @@
+// luria.config — local reference genomes for nf-core runs on MIT Luria.
+//
+// Rendered from luria.config.tmpl (REFS_ROOT := <LURIA_WORKING_PATH>/refs) and
+// staged to Luria, then handed to Nextflow with `-c`. Selecting a genome with
+// `--genome <KEY>` resolves to the LOCAL fasta/gtf below, overriding nf-core's
+// built-in iGenomes entry. Any `--genome` key NOT listed here falls through to
+// iGenomes (an on-demand S3 download from a compute node).
+//
+// Keys MUST match the `igenomes_key` values in reports/templates/nfcore/
+// reference_bundles.json — that is the value the pipeline agent threads into
+// `--genome`. GENCODE GTFs (human/mouse) still need `--gencode`; Ensembl GTFs
+// (the macaques) do not — that flag is handled per-pipeline, not here.
+//
+// fasta/gtf are gzipped; nf-core consumes .gz directly. Contig naming is
+// self-consistent per genome (GENCODE for human/mouse, Ensembl for macaques) —
+// never mix a fasta and gtf from different providers.
+
+params {
+    genomes {
+        'GRCh38' {
+            fasta = '{{REFS_ROOT}}/GRCh38.primary_assembly.genome.fa.gz'
+            gtf   = '{{REFS_ROOT}}/gencode.v46.basic.annotation.gtf.gz'
+        }
+        'GRCm39' {
+            fasta = '{{REFS_ROOT}}/GRCm39.primary_assembly.genome.fa.gz'
+            gtf   = '{{REFS_ROOT}}/gencode.vM39.basic.annotation.gtf.gz'
+        }
+        'Mfas6.0' {
+            fasta = '{{REFS_ROOT}}/Macaca_fascicularis.Macaca_fascicularis_6.0.dna.toplevel.fa.gz'
+            gtf   = '{{REFS_ROOT}}/Macaca_fascicularis.Macaca_fascicularis_6.0.116.gtf.gz'
+        }
+        'Mmul_10' {
+            fasta = '{{REFS_ROOT}}/Macaca_mulatta.Mmul_10.dna.toplevel.fa.gz'
+            gtf   = '{{REFS_ROOT}}/Macaca_mulatta.Mmul_10.116.gtf.gz'
+        }
+    }
+}

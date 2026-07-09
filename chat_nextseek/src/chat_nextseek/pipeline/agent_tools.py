@@ -34,6 +34,7 @@ from ..seqera.emitter import emit_launch_artifacts, emit_nfcore_artifacts
 from ..seqera.ena import extract_accessions_from_metadata, resolve_accessions
 from ..seqera.pipeline_params import (
     build_run_params,
+    gencode_for_genome_key,
     load_pipeline_context,
     load_reference_bundles,
     resolve_bundle_for_species,
@@ -551,15 +552,25 @@ def tool_submit_to_luria(config: "ChatConfig", state: dict, tool_input: dict | N
     luria_env = dict(getattr(config, "LURIA_ENV", {}) or {})
     samplesheet = artifacts.get("samplesheet")
     # Thread the species-resolved iGenomes key (mouse->GRCm39, human->GRCh38) that configure_run
-    # computed, so run.sh aligns to the right genome instead of a hardcoded GRCh38.
-    genome = ((state.get("launch_plan") or {}).get("params") or {}).get("genome")
+    # computed, so run.sh aligns to the right genome instead of a hardcoded GRCh38. The full
+    # merged param set feeds params.yml (per-pipeline curated params); the submitter strips the
+    # CLI-owned keys (input/outdir/genome) from it.
+    launch_params = dict((state.get("launch_plan") or {}).get("params") or {})
+    genome = launch_params.get("genome")
+    # Luria runs on local luria.config refs, which are GENCODE for human/mouse (Ensembl for the
+    # macaques). Set --gencode from the genome when the pipeline curates a gencode param — the
+    # shared build_run_params leaves it at the curated default because that value is Tower-correct
+    # (iGenomes, non-GENCODE) but wrong for our local GENCODE refs.
+    if "gencode" in launch_params and gencode_for_genome_key(genome):
+        launch_params["gencode"] = True
     tool_input = tool_input or {}
     try:
         runs = submit_luria(launch, luria_env=luria_env,
                             resources=tool_input.get("resources"),
                             job_name=tool_input.get("job_name"),
                             samplesheet_local=samplesheet,
-                            genome=genome)
+                            genome=genome,
+                            launch_params=launch_params)
     except Exception as exc:
         return json.dumps({"ok": False, "message": f"Luria submit failed: {exc!r}"})
     if not runs:

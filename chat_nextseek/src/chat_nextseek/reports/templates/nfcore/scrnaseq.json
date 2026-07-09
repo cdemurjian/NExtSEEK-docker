@@ -2,14 +2,22 @@
   "report_type": "NFCORE_SCRNASEQ_SAMPLESHEET",
   "description": "nf-core/scrnaseq samplesheet context JSON template aligned to the current nf-core/scrnaseq usage documentation. Designed for LLM-friendly parsing and conversion into the main pipeline CSV and any required companion CSVs.",
   "params": {
-    "aligner":        {"type": "enum", "allowed": ["alevin", "kallisto", "star", "cellranger", "cellrangermulti"], "default": "alevin", "steerable": true},
-    "protocol":       {"type": "enum", "allowed": ["auto", "10XV2", "10XV3"], "default": "auto", "steerable": true, "help": "10x chemistry; auto-detect by default"},
-    "save_reference": {"type": "bool", "default": true, "steerable": true},
+    "aligner":        {"type": "enum", "allowed": ["simpleaf", "kallisto", "star", "cellranger", "cellrangerarc", "cellrangermulti"], "default": "simpleaf", "steerable": true, "help": "quantifier/aligner. simpleaf (alevin-fry, default) handles 10x + custom bead protocols; star=STARsolo; cellranger* for 10x Cell Ranger."},
+    "protocol":       {"type": "enum", "allowed": ["auto", "10XV1", "10XV2", "10XV3", "10XV4", "dropseq", "1{b[12]u[8]x:}2{r:}"], "default": "auto", "steerable": true, "help": "Chemistry. Default 'auto' = 10x auto-detect. For Seq-Well / Drop-seq bead data (12bp cell barcode + 8bp UMI on R1, cDNA on R2) use 'dropseq' (preset, carries a QCatch chemistry mapping) or the explicit simpleaf geometry '1{b[12]u[8]x:}2{r:}'. Any string is passed straight to the aligner. See protocol_presets."},
+    "barcode_whitelist": {"type": "string", "default": null, "steerable": true, "help": "Leave unset for bead-based Seq-Well/Drop-seq — barcodes are discovered by the knee method. Supply a whitelist file path only for platforms with a fixed barcode list."},
+    "qcatch_n_partitions": {"type": "int", "default": null, "steerable": true, "help": "Set only when using a raw custom --protocol geometry that has no QCatch chemistry mapping (for empty-droplet detection). Not needed for named presets like 'dropseq' or the 10x chemistries."},
+    "save_reference": {"type": "bool", "default": true, "steerable": true, "help": "save built simpleaf/STAR/kallisto indices to results for reuse"},
     "skip_emptydrops":{"type": "bool", "default": false, "steerable": true},
     "skip_fastqc":    {"type": "bool", "default": false, "steerable": true},
     "multiqc_title":  {"type": "string", "default": null, "steerable": true}
   },
   "reference_resources": ["fasta", "gtf", "salmon_index", "star_index", "txp2gene"],
+  "protocol_presets": {
+    "description": "How to set --protocol/--aligner for common single-cell chemistries. simpleaf geometry strings describe the read layout: b[N]=cell barcode of N bases, u[N]=UMI of N bases, x:=discard the remaining bases on that read, r:=the whole read is cDNA. '1{...}2{...}' means read1 layout then read2 layout.",
+    "10x": {"protocol": "auto", "aligner": "simpleaf", "note": "auto-detects 10X V2/V3/V4; or set 10XV2/10XV3/10XV4 explicitly."},
+    "seqwell": {"protocol": "dropseq", "geometry": "1{b[12]u[8]x:}2{r:}", "aligner": "simpleaf", "barcode_whitelist": null, "note": "Seq-Well (and Drop-seq) = 12bp cell barcode + 8bp UMI on R1, cDNA on R2, no fixed whitelist (knee-method cell calling). The 'dropseq' preset is equivalent to the geometry and carries a QCatch chemistry mapping; use the raw geometry + qcatch_n_partitions only for a non-standard partition count."},
+    "dropseq": {"protocol": "dropseq", "geometry": "1{b[12]u[8]x:}2{r:}", "aligner": "simpleaf", "barcode_whitelist": null}
+  },
   "pipeline": {
     "name": "nf-core/scrnaseq",
     "repository": "https://github.com/nf-core/scrnaseq",

