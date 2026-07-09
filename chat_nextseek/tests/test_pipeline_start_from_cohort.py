@@ -19,3 +19,7 @@ def test_start_from_cohort_seeds_state(monkeypatch):
     assert state["resolved"]["accessions"] == []
     assert result["action"] == "ask"
     assert "Primed" in result["reply"]
+
+    msg = state["messages"][0]["content"]
+    assert "MUS-1" in msg and "MUS-2" in msg
+    assert "explicit_uids" in msg

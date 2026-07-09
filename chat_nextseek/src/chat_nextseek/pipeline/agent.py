@@ -99,7 +99,9 @@ def start_from_cohort(session, config: "ChatConfig", *, uids: list[str], pipelin
     state = {
         "active": True,
         "messages": [{"role": "user",
-                      "content": user_query or f"Launch {pipeline_key} on these samples."}],
+                      "content": user_query or (
+                          f"Launch {pipeline_key} on these NExtSEEK samples — resolve them with "
+                          f"resolve_samples(kind='explicit_uids'): {', '.join(uids)}")}],
         "resolved": {"uids": list(uids), "accessions": []},
         "artifacts": {},
         "pipeline_key": pipeline_key,
