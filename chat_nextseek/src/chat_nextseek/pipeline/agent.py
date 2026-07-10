@@ -71,9 +71,14 @@ def _text_of(content: list) -> str:
     return "\n".join(b.get("text", "") for b in content if isinstance(b, dict) and b.get("type") == "text").strip()
 
 
-def start(session, config: "ChatConfig", *, user_query: str, parser_plan: Any, reporter_plan: Any,
-          log_dir: str | None = None) -> dict[str, Any]:
-    """Launch a fresh pipeline conversation."""
+def start(session, config: "ChatConfig", *, user_query: str, parser_plan: Any = None,
+          reporter_plan: Any = None, log_dir: str | None = None) -> dict[str, Any]:
+    """Launch a fresh pipeline conversation.
+
+    ``parser_plan``/``reporter_plan`` are accepted for the reporter-branch caller
+    (orchestrator.py) but are unused — the wizard seeds from ``user_query`` + pinned
+    context only. The CC bridge (run_pipeline_launch) calls this with neither.
+    """
     pinned = summarize_pinned_bundle(session)
     seed = user_query if not pinned else f"{user_query}\n\n[context] {pinned}"
     state = {
