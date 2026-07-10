@@ -93,8 +93,8 @@ def _dispatch_parse(args):
         _err(e.code, e.message, e.exit_code)  # pragma: no cover
 
 
-def _run_viewset(query: str, mode: str) -> dict:  # pragma: no cover  # Minor-8
-    """Shared helper: drive the NExtSEEK assistant viewset for query and plan ops.
+def _run_viewset(query: str, mode: str, *, session_id: str | None = None) -> dict:  # pragma: no cover  # Minor-8
+    """Shared helper: drive the NExtSEEK assistant viewset for query/plan/pipeline ops.
 
     Handles 401/HTTP/transport errors uniformly and returns the shaped terminal
     dict {"reply": str, "debug": {...}, "bundle_id": int|None}.
@@ -107,7 +107,7 @@ def _run_viewset(query: str, mode: str) -> dict:  # pragma: no cover  # Minor-8
         auth=(_api_user(), _api_pass()),  # pragma: no cover
     )  # pragma: no cover
     try:  # pragma: no cover
-        terminal, _ = client.run_query(query, mode=mode)  # pragma: no cover
+        terminal, _ = client.run_query(query, mode=mode, session_id=session_id)  # pragma: no cover
     except httpx.HTTPStatusError as e:  # pragma: no cover
         if e.response.status_code == 401:  # pragma: no cover
             _err("AUTH_FAILED", "authentication failed (check NS credentials)", 8)  # pragma: no cover
@@ -228,30 +228,20 @@ def _dispatch_generate_submission(args):
 
 
 def _dispatch_pipeline(args):
-    """Seed NS pipeline_agent from a CC-resolved cohort (bridge op)."""
-    import os
-    import _assistant_client as ac  # pragma: no cover
-    import httpx  # pragma: no cover
+    """Hand a CC-composed summary message to NS pipeline_agent (deterministic bridge).
+
+    Posts the message to the async query path with mode='pipeline' + the injected
+    chat session id; the server calls pipeline_agent.start directly (no parser) and
+    the poll loop surfaces the wizard's real first reply. No 30 s ReadTimeout.
+    """
     session_id = os.environ.get("NEXTSEEK_CHAT_SESSION_ID")
     if not session_id:
         _err("CONFIG_MISSING", "NEXTSEEK_CHAT_SESSION_ID not set (need a chat session to seed)", 2)
-    if not args.uids:
-        _err("BAD_REQUEST", "missing --uids", 3)
-    if not args.pipeline:
-        _err("BAD_REQUEST", "missing --pipeline", 3)
-    client = ac.AssistantClient(  # pragma: no cover
-        base_url=os.environ["NEXTSEEK_URL"],
-        assistant_prefix=os.environ.get("NEXTSEEK_ASSISTANT_PREFIX", "nextseek_api/assistant"),
-        auth=(_api_user(), _api_pass()),
-    )
-    try:  # pragma: no cover
-        return client.launch_pipeline(session_id=session_id, uids=args.uids, pipeline=args.pipeline)
-    except httpx.HTTPStatusError as e:  # pragma: no cover
-        if e.response.status_code == 401:
-            _err("AUTH_FAILED", "authentication failed (check NS credentials)", 8)
-        _err("AGENT_FAILED", f"HTTP {e.response.status_code}: {e.response.text}", 4)
-    except httpx.TransportError as e:  # pragma: no cover
-        _err("TRANSPORT_ERROR", f"viewset unreachable: {type(e).__name__}", 7)
+    if not getattr(args, "message", None):
+        _err("VALIDATION", "missing --message", 3)
+    if _dry_run():
+        return {"reply": "[dry-run]", "debug": {}, "bundle_id": None}
+    return _run_viewset(args.message, mode="pipeline", session_id=session_id)
 
 
 def _dispatch_query(args):
@@ -301,6 +291,7 @@ def main() -> None:
     p.add_argument("--type")  # for generate-submission
     p.add_argument("--uids")  # for generate-submission
     p.add_argument("--pipeline")  # for pipeline (nf-core key)
+    p.add_argument("--message")  # for pipeline (CC-composed summary)
     p.add_argument("--planner", action="store_true",  # for query
                    help="Use run_query_plan instead of run_query (multi-step capable)")
     args = p.parse_args()

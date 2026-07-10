@@ -239,15 +239,3 @@ class AssistantClient:
             r = client.get(self._url(f"sessions/{session_id}/bundles/{bundle_id}/artifacts/{artifact_key}/"))
             r.raise_for_status()
             return r.content
-
-    def launch_pipeline(self, *, session_id: str, uids: str, pipeline: str) -> dict:
-        """POST pipeline/ — seed NS pipeline_agent from a CC-resolved cohort.
-
-        Synchronous: returns {"reply", "action", "pipeline", "primed_uid_count"}.
-        """
-        body = {"session_id": session_id, "uids": uids,
-                "pipeline": pipeline, "use_prod": False}
-        with self._client() as client:
-            resp = client.post(self._url("pipeline/"), json=body)
-            resp.raise_for_status()
-            return resp.json()
