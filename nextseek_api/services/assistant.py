@@ -339,6 +339,28 @@ def _safe_artifact_path(src) -> Path | None:
     return None
 
 
+def _servable_artifacts(saved_files, base_url: str) -> list[dict]:
+    """Advertise only ``saved_files`` entries that are real on-disk files under an
+    allowed artifact root.
+
+    The submission emitter records staging side-effects in ``saved_files`` that the
+    download endpoint (``_safe_artifact_path``) will 403 on: a samplesheet copied to
+    a Tower/Luria input dir OUTSIDE ``<BASE_DIR>/outputs`` (``staged_samplesheet``),
+    and ``tower_dataset_*`` values that are URLs, not paths. Advertising those as
+    downloadable artifacts makes the caller fetch a URL that always fails with
+    "File path not within allowed artifact directory." Filtering here keeps the
+    contract honest: every advertised artifact is fetchable.
+
+    Uses the same ``_resolve_saved_path`` -> ``_safe_artifact_path`` chain the download
+    endpoint uses, so a value may be a string path OR a list of paths (multi-file keys
+    like ``geo_seq_workbooks``) — advertised iff its served path is under a root."""
+    return [
+        {"key": key, "url": f"{base_url}/{key}/"}
+        for key, src in (saved_files or {}).items()
+        if _safe_artifact_path(_resolve_saved_path(src)) is not None
+    ]
+
+
 class AssistantViewSet(viewsets.ViewSet):
     """ViewSet for the NExtSEEK Assistant (multi-agent chat)."""
 
@@ -1235,7 +1257,7 @@ class AssistantViewSet(viewsets.ViewSet):
 
         base = (f"/nextseek_api/assistant/sessions/{chat_session.session_id}"
                 f"/bundles/{bundle_id}/artifacts")
-        artifacts = [{"key": k, "url": f"{base}/{k}/"} for k in (saved_files or {})]
+        artifacts = _servable_artifacts(saved_files, base)
         if op == "generate-submission":
             # The submission output has no on-disk file; expose it as a combined xlsx.
             artifacts.append({"key": "all_tables", "url": f"{base}/all_tables/"})
