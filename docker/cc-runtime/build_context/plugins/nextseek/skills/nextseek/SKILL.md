@@ -48,7 +48,7 @@ is the complete contract; there are no hidden flags.
 | `nextseek-graph` | Run a Neo4j lineage/graph query from NL. | `--query "<text>"` | `{cypher, result}` |
 | `nextseek-report` | Project summary report. | `--mode {samples,protocols,published,rppr} --project <name>` | report `{summary, saved_files, rows}` |
 | `nextseek-generate-submission` | Build a submission **workbook** (samplesheet/metadata **file**) for a UID set. Does NOT run/launch a pipeline. | `--type {GEO,SRA,NFCORE_RNASEQ,NFCORE_SCRNASEQ,PRIDE} --uids <csv>` | `{report, type}` |
-| `nextseek-pipeline` | **Launch** an nf-core pipeline on the cluster (Luria/Tower) for an already-resolved cohort — seeds the interactive launch wizard. | `--uids <csv> --pipeline {rnaseq,scrnaseq,sarek,chipseq,atacseq,methylseq,ampliseq,fetchngs}` | `{reply, action, pipeline, primed_uid_count}` |
+| `nextseek-pipeline` | **Launch** an nf-core pipeline on the cluster (Luria/Tower) — hand a composed cohort summary to the pipeline agent, which then runs the interactive launch wizard. | `--message "<summary: explicit UIDs + species/genome + metadata + pipeline>"` | `{reply, debug, bundle_id}` |
 | `nextseek-plan` | Multi-step planner advisor (read-only). | `--query "<text>"` | `{plan, recommended_next_actions, ...}` |
 
 ## Choosing the op for a task
@@ -108,17 +108,21 @@ sample IDs named.
 
 **Pipeline launch — `nextseek-pipeline`.** When the user wants to **run / launch / submit a
 pipeline** on the cluster (Luria/Tower) for samples you've already resolved — not merely produce a
-workbook — hand the cohort to the pipeline agent:
+workbook — compose ONE comprehensive summary of the chat and hand it to the pipeline agent:
 
 ```bash
-nextseek-pipeline --uids "D.SEQ-220823SHA-1,D.SEQ-220823SHA-2" --pipeline scrnaseq
+nextseek-pipeline --message "Launch the nf-core scRNA-seq pipeline on these 6 NExtSEEK Sequencing Data samples (species: rhesus macaque; study: Gideon 4wk): D.SEQ-220823SHA-1, -2, -3, -4, -5, -6. Resolve them, then propose genome + params before launching."
 ```
 
-This seeds the interactive launch wizard; relay its reply and let the user confirm genome/params in
-chat (those follow-up turns continue on the NExtSEEK side, not here). **Decision rule:** intent is
-to *run/launch/submit/execute* a pipeline → `nextseek-pipeline`; intent is to *build/generate a
-submission or samplesheet file* → `nextseek-generate-submission`. When the user says "submit/run a
-pipeline for these samples," prefer `nextseek-pipeline`.
+Do your best to summarize everything relevant: the **explicit sample UIDs**, the **species/genome**,
+any pertinent **metadata/provenance**, and the **nf-core pipeline** the user asked for. The pipeline
+agent reasons over your message (it picks the pipeline, resolves the cohort, and proposes
+genome/params), so include what it needs. After you call this op, relay its reply — the wizard's
+real first proposal — and let the user confirm in chat; **those follow-up turns continue on the
+NExtSEEK side, not here.** **Decision rule:** intent is to *run/launch/submit/execute* a pipeline →
+`nextseek-pipeline`; intent is to *build/generate a submission or samplesheet file* →
+`nextseek-generate-submission`. **On a `nextseek-pipeline` error, do NOT fall back to
+`nextseek-generate-submission`** — report the error and let the user retry.
 
 **Multi-step "do X, then Y" — `nextseek-plan`.** See the planner section below.
 
