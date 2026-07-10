@@ -4,8 +4,9 @@ description: >
   This skill should be used when the user asks to query NExtSEEK — "find/list/show/count
   samples", "retrieve a sample by UID", "show the sample tree / lineage", "run a graph
   query", "refine that search", "what sampletypes/assays exist", "build a project report
-  (samples/protocols/published/rppr)", "generate a GEO/SRA/nf-core/PRIDE submission", "plan
-  a multi-step lookup", or "create/update/delete NExtSEEK data". Do NOT trigger on general
+  (samples/protocols/published/rppr)", "generate a GEO/SRA/nf-core/PRIDE submission workbook",
+  "launch/run/submit an nf-core pipeline (rnaseq/scrnaseq) on the cluster for these samples",
+  "plan a multi-step lookup", or "create/update/delete NExtSEEK data". Do NOT trigger on general
   bioinformatics questions, code/file edits, non-NExtSEEK data sources, or file-system tasks.
 disable-model-invocation: false
 ---
@@ -46,7 +47,8 @@ is the complete contract; there are no hidden flags.
 | `nextseek-api-write` | Execute a write (POST/PUT/DELETE) from a parser plan. | `--parser-plan '<json>' --confirmed-write` | API response |
 | `nextseek-graph` | Run a Neo4j lineage/graph query from NL. | `--query "<text>"` | `{cypher, result}` |
 | `nextseek-report` | Project summary report. | `--mode {samples,protocols,published,rppr} --project <name>` | report `{summary, saved_files, rows}` |
-| `nextseek-generate-submission` | Build a submission workbook for a UID set. | `--type {GEO,SRA,NFCORE_RNASEQ,NFCORE_SCRNASEQ,PRIDE} --uids <csv>` | `{report, type}` |
+| `nextseek-generate-submission` | Build a submission **workbook** (samplesheet/metadata **file**) for a UID set. Does NOT run/launch a pipeline. | `--type {GEO,SRA,NFCORE_RNASEQ,NFCORE_SCRNASEQ,PRIDE} --uids <csv>` | `{report, type}` |
+| `nextseek-pipeline` | **Launch** an nf-core pipeline on the cluster (Luria/Tower) for an already-resolved cohort — seeds the interactive launch wizard. | `--uids <csv> --pipeline {rnaseq,scrnaseq,sarek,chipseq,atacseq,methylseq,ampliseq,fetchngs}` | `{reply, action, pipeline, primed_uid_count}` |
 | `nextseek-plan` | Multi-step planner advisor (read-only). | `--query "<text>"` | `{plan, recommended_next_actions, ...}` |
 
 ## Choosing the op for a task
@@ -94,7 +96,8 @@ nextseek-report --mode protocols --project "CGR"
 Derive the mode from the phrasing (`samples`, `protocols`, `published`, `rppr`); default to
 `samples`.
 
-**Submission — `nextseek-generate-submission`.** GEO / SRA / nf-core / PRIDE for a UID set:
+**Submission workbook — `nextseek-generate-submission`.** Builds a GEO / SRA / nf-core / PRIDE
+**workbook** (a samplesheet/metadata *file*) for a UID set. It does NOT run anything:
 
 ```bash
 nextseek-generate-submission --type SRA --uids "D.SEQ-230512FOR-288-PUB,D.SEQ-230512FOR-289-PUB"
@@ -102,6 +105,20 @@ nextseek-generate-submission --type SRA --uids "D.SEQ-230512FOR-288-PUB,D.SEQ-23
 
 Map the phrasing to `--type` ("nf-core rnaseq" → `NFCORE_RNASEQ`) and read `--uids` from the
 sample IDs named.
+
+**Pipeline launch — `nextseek-pipeline`.** When the user wants to **run / launch / submit a
+pipeline** on the cluster (Luria/Tower) for samples you've already resolved — not merely produce a
+workbook — hand the cohort to the pipeline agent:
+
+```bash
+nextseek-pipeline --uids "D.SEQ-220823SHA-1,D.SEQ-220823SHA-2" --pipeline scrnaseq
+```
+
+This seeds the interactive launch wizard; relay its reply and let the user confirm genome/params in
+chat (those follow-up turns continue on the NExtSEEK side, not here). **Decision rule:** intent is
+to *run/launch/submit/execute* a pipeline → `nextseek-pipeline`; intent is to *build/generate a
+submission or samplesheet file* → `nextseek-generate-submission`. When the user says "submit/run a
+pipeline for these samples," prefer `nextseek-pipeline`.
 
 **Multi-step "do X, then Y" — `nextseek-plan`.** See the planner section below.
 
