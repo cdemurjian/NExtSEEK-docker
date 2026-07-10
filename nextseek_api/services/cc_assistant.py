@@ -206,6 +206,26 @@ def _decide_route(user, req, *, force_cc: bool, session=None) -> cc_router.Route
     return cc_router.decide(req.query)
 
 
+def _persist_cc_session_id(chat_session, cc_sid: str) -> None:
+    """Single-key cc_session_id write that MERGES onto the latest DB extra_state.
+
+    refresh_from_db picks up any keys (e.g. pipeline_agent) written concurrently by
+    a nested query/async request on the same ChatSession, so this write never
+    clobbers them (the whole extra_state column is rewritten by save()).
+    """
+    try:
+        chat_session.refresh_from_db(fields=["extra_state"])
+        es = chat_session.extra_state or {}
+        es["cc_session_id"] = cc_sid
+        chat_session.extra_state = es
+        chat_session.save(update_fields=["extra_state", "updated_at"])
+    except Exception:
+        logger.exception(
+            "cc: failed to persist cc_session_id=%r; resume unavailable this turn",
+            cc_sid,
+        )
+
+
 class CCAssistantViewSet(viewsets.ViewSet):
     """Router + Container-Claude-Code assistant (additive to AssistantViewSet)."""
 
@@ -312,15 +332,11 @@ class CCAssistantViewSet(viewsets.ViewSet):
                     def _persist_cc_session(cc_sid: str) -> None:
                         # Single-key read-modify-write; never clobber other
                         # extra_state keys. Re-captured every turn (robust if the
-                        # claude id rotates under -p --resume).
-                        try:
-                            chat_session.extra_state["cc_session_id"] = cc_sid
-                            chat_session.save(update_fields=["extra_state", "updated_at"])
-                        except Exception:
-                            logger.exception(
-                                "cc: failed to persist cc_session_id=%r; resume unavailable this turn",
-                                cc_sid,
-                            )
+                        # claude id rotates under -p --resume). Delegates to the
+                        # module-level helper which refresh_from_db-merges onto the
+                        # latest DB state (guards against a concurrent nested
+                        # query/async pipeline_agent seed).
+                        _persist_cc_session_id(chat_session, cc_sid)
 
                     cc_send = cc_session.make_session_sniffer(send_event, _persist_cc_session)
 
