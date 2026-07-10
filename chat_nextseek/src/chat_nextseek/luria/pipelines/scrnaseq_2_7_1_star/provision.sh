@@ -30,7 +30,7 @@ dest = pathlib.Path(sys.argv[1])
 pj = dest / "assets" / "protocols.json"
 data = json.loads(pj.read_text())
 assert data["star"]["dropseq"]["protocol"] == "CB_UMI_Simple", "2.7.1 drift: star.dropseq changed"
-data["star"]["dropseq"]["extra_args"] = "--soloCBstart 1 --soloCBlen 12 --soloUMIstart 13 --soloUMIlen 8"
+data["star"]["dropseq"]["extra_args"] = "--soloCBstart 1 --soloCBlen 12 --soloUMIstart 13 --soloUMIlen 8 --soloBarcodeReadLength 0"
 pj.write_text(json.dumps(data, indent=4) + "\n")
 print("[provision] patched", pj)
 

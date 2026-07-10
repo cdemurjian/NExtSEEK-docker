@@ -11,12 +11,17 @@ carry `"extra_args": "--soloUMIlen 10"`/`"12"`. Seq-Well is 12bp CB + 8bp UMI, s
 
 ```json
 "dropseq": { "protocol": "CB_UMI_Simple",
-             "extra_args": "--soloCBstart 1 --soloCBlen 12 --soloUMIstart 13 --soloUMIlen 8" }
+             "extra_args": "--soloCBstart 1 --soloCBlen 12 --soloUMIstart 13 --soloUMIlen 8 --soloBarcodeReadLength 0" }
 ```
 
 `WorkflowScrnaseq.getProtocol()` returns this to the workflow as `other_10x_parameters`, injected into
 the STAR command. STAR does NOT default 12/8 for `CB_UMI_Simple` (defaults ~16/10), so without this the
 seqwell reads are silently misparsed.
+
+`--soloBarcodeReadLength 0` disables STARsolo's strict check that the barcode read (R1) length equals
+CB+UMI (20). These reads are 21bp (one trailing base beyond the 20bp barcode+UMI); STAR still reads CB
+from positions 1-12 and UMI from 13-20 and ignores the extra base — matching what salmon alevin does
+leniently (the green alevin run used the same 12+8 on these 21bp reads).
 
 **2. `modules/local/star_align.nf` — whitelist-None for bead protocols.** Stock hardcodes
 `--soloCBwhitelist <(gzip -cdf $whitelist)`; dropseq stages no whitelist so `$whitelist` is empty and STAR
