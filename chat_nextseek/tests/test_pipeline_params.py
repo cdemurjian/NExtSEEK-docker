@@ -40,6 +40,16 @@ def test_scrnaseq_has_curated_params_and_reference_resources():
     assert doc["reference_resources"] == ["fasta", "gtf", "salmon_index", "star_index", "txp2gene"]
 
 
+def test_process_args_for():
+    from chat_nextseek.seqera.pipeline_params import process_args_for
+    # scrnaseq.json declares dropseq (seqwell, no whitelist) needs SIMPLEAF_QUANT --knee
+    assert process_args_for("scrnaseq", "dropseq") == {"SIMPLEAF_QUANT": "--knee"}
+    assert process_args_for("scrnaseq", "auto") == {}      # 10x -> whitelist path, no knee
+    assert process_args_for("scrnaseq", None) == {}
+    assert process_args_for("rnaseq", "dropseq") == {}     # rnaseq declares no process_args
+    assert "_comment" not in process_args_for("scrnaseq", "dropseq")
+
+
 def test_gencode_for_genome_key():
     from chat_nextseek.seqera.pipeline_params import gencode_for_genome_key
     assert gencode_for_genome_key("GRCh38") is True     # GENCODE human

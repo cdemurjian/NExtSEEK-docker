@@ -25,6 +25,24 @@ def load_pipeline_context(pipeline_key: str) -> dict[str, Any]:
     return {"params": doc.get("params") or {}, "reference_resources": list(doc.get("reference_resources") or [])}
 
 
+@lru_cache(maxsize=None)
+def _load_pipeline_doc(pipeline_key: str) -> dict[str, Any]:
+    """Full curated JSON for a pipeline ({} if absent)."""
+    path = _NFCORE_DIR / f"{(pipeline_key or '').strip().lower()}.json"
+    return json.loads(path.read_text()) if path.exists() else {}
+
+
+def process_args_for(pipeline_key: str, protocol: str | None) -> dict[str, str]:
+    """{process_name: ext_args} the curated JSON declares a protocol needs — e.g. scrnaseq
+    'dropseq' -> {'SIMPLEAF_QUANT': '--knee'}. Read from <key>.json 'protocol_process_args'.
+    Data-driven (the JSON owns which protocol needs which process args); {} when none."""
+    if not protocol:
+        return {}
+    table = _load_pipeline_doc(pipeline_key).get("protocol_process_args") or {}
+    entry = table.get(str(protocol).strip()) or {}
+    return {k: v for k, v in entry.items() if not str(k).startswith("_")}
+
+
 @lru_cache(maxsize=1)
 def load_reference_bundles() -> dict[str, Any]:
     """Load the species->bundle reference registry; empty registry if the file is absent."""

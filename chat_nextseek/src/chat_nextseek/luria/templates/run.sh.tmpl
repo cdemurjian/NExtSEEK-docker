@@ -40,6 +40,7 @@ nextflow run {{PIPELINE}} -r {{REVISION}} -profile singularity \
     --input samplesheet.csv \
     --outdir . \
     --genome {{GENOME}} \
+    {{REFS_FLAGS}} \
     -w {{WORK_DIR}} \
     -resume
 

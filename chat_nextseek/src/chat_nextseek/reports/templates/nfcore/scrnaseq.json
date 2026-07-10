@@ -17,6 +17,10 @@
     "seqwell": {"protocol": "dropseq", "aligner": "alevin", "barcode_whitelist": null, "note": "Seq-Well (and Drop-seq) = 12bp cell barcode + 8bp UMI on R1, cDNA on R2, no fixed whitelist (knee-method cell calling). Use protocol 'dropseq' with the alevin aligner. 3.x/simpleaf equivalent geometry: 1{b[12]u[8]x:}2{r:}."},
     "dropseq": {"protocol": "dropseq", "aligner": "alevin", "barcode_whitelist": null}
   },
+  "protocol_process_args": {
+    "_comment": "Per-protocol Nextflow process ext.args, applied via a -c config at submit time (luria.submitter). Keyed by the --protocol value. Seq-Well/Drop-seq has no barcode whitelist, so simpleaf's cell-calling needs a mode; --knee (knee-point) is the whitelist-free choice. NOT needed for 10x (uses the whitelist path).",
+    "dropseq": {"SIMPLEAF_QUANT": "--knee"}
+  },
   "pipeline": {
     "name": "nf-core/scrnaseq",
     "repository": "https://github.com/nf-core/scrnaseq",

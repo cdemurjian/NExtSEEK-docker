@@ -21,7 +21,7 @@ try:
 except Exception:  # pragma: no cover
     _yaml = None
 
-from .run_script import render_run_script, render_luria_config, sanitize_job_name
+from .run_script import render_run_script, render_luria_config, render_process_config, sanitize_job_name
 from .ssh import prepare_key, ssh_run, scp_file
 
 _JOB_ID_RE = re.compile(r"Submitted batch job (\d+)")
@@ -50,7 +50,8 @@ def _write_temp(text: str, *, prefix: str, suffix: str) -> str:
 
 def submit_luria(launch_yml_path, *, luria_env: dict, resources: dict | None = None,
                  job_name: str | None = None, samplesheet_local: str | None = None,
-                 genome: str | None = None, launch_params: dict | None = None, cwd=None) -> list[dict]:
+                 genome: str | None = None, launch_params: dict | None = None,
+                 process_args: dict | None = None, cwd=None) -> list[dict]:
     """Submit each launch.yml entry to Luria via ssh+sbatch. Returns run refs (empty on any skip)."""
     launch_path = Path(launch_yml_path).resolve()
     if not launch_path.exists():
@@ -78,7 +79,7 @@ def submit_luria(launch_yml_path, *, luria_env: dict, resources: dict | None = N
                 continue
             try:
                 ref = _submit_one(entry, idx, parent, working, luria_env, resources, job_name, key_path,
-                                  samplesheet_local, genome, launch_params)
+                                  samplesheet_local, genome, launch_params, process_args)
                 if ref:
                     runs.append(ref)
             except Exception as exc:
@@ -92,7 +93,7 @@ def submit_luria(launch_yml_path, *, luria_env: dict, resources: dict | None = N
 
 
 def _submit_one(entry, idx, parent, working, luria_env, resources, job_name, key_path,
-                samplesheet_local=None, genome=None, launch_params=None):
+                samplesheet_local=None, genome=None, launch_params=None, process_args=None):
     name = (entry.get("name") or f"run{idx}").strip() or f"run{idx}"
     pipeline = entry.get("pipeline")
     revision = entry.get("revision")
@@ -124,19 +125,23 @@ def _submit_one(entry, idx, parent, working, luria_env, resources, job_name, key
         print(f"[LURIA][SUBMIT] entry {name!r}: no resolved genome — defaulting to GRCh38 "
               "(VERIFY the cohort is human before trusting results!)")
 
-    # run.sh drives the run with -c luria.config (local reference genomes) and
-    # -params-file params.yml (curated per-pipeline params), plus CLI flags
-    # (--input/--outdir/--genome) that override params.yml. We stage all three
-    # generated files (run.sh, luria.config, params.yml) + the samplesheet.
+    # run.sh drives the run with explicit --fasta/--gtf for the resolved genome (path > iGenomes;
+    # the params.genomes map resolution is unreliable), -params-file params.yml (curated params),
+    # and -c luria.config (genomes map for --genome identity + a per-protocol SIMPLEAF_QUANT
+    # --knee block for scrnaseq bead protocols). Stage run.sh + luria.config + params.yml + sheet.
     refs_root = f"{working}/refs"
     tmp_files: list[str] = []
     try:
         run_sh = render_run_script(
             job_name=safe, pipeline=pipeline, revision=revision, run_dir=remote_run_dir,
             work_dir=work_dir, singularity_cache=cache_dir, genome=run_genome, resources=resources,
+            refs_root=refs_root,
         )
         run_tmp = _write_temp(run_sh, prefix="run_", suffix=".sh"); tmp_files.append(run_tmp)
-        cfg_tmp = _write_temp(render_luria_config(refs_root), prefix="luriacfg_", suffix=".config")
+        # luria.config = genomes map + any curated per-protocol process ext.args (e.g. seqwell/dropseq
+        # -> SIMPLEAF_QUANT --knee); process_args comes from the pipeline JSON via tool_submit_to_luria.
+        luria_config = render_luria_config(refs_root) + render_process_config(process_args)
+        cfg_tmp = _write_temp(luria_config, prefix="luriacfg_", suffix=".config")
         tmp_files.append(cfg_tmp)
         params_tmp = _write_temp(_build_params_yml(launch_params), prefix="params_", suffix=".yml")
         tmp_files.append(params_tmp)

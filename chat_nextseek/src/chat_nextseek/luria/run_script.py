@@ -52,19 +52,81 @@ def validate_genome(genome: str) -> str:
 
 _TEMPLATE = Path(__file__).parent / "templates" / "run.sh.tmpl"
 
-_LURIA_CONFIG_TEMPLATE = Path(__file__).parent / "templates" / "luria.config.tmpl"
 _REFS_ROOT_RE = re.compile(r"[A-Za-z0-9_./-]{1,256}")
+
+# Single source of truth for local reference genomes on Luria: genome key -> reference
+# filenames under {LURIA_WORKING_PATH}/refs. Drives BOTH the luria.config genomes map and the
+# explicit --fasta/--gtf CLI flags — because the map's params.genomes resolution is unreliable
+# in Nextflow, submit_to_luria passes the paths directly (path > iGenomes, globally). Keys MUST
+# match the igenomes_key values in reports/templates/nfcore/reference_bundles.json.
+LURIA_GENOMES: dict[str, dict[str, str]] = {
+    "GRCh38":  {"fasta": "GRCh38.primary_assembly.genome.fa.gz",
+                "gtf":   "gencode.v46.basic.annotation.gtf.gz"},
+    "GRCm39":  {"fasta": "GRCm39.primary_assembly.genome.fa.gz",
+                "gtf":   "gencode.vM39.basic.annotation.gtf.gz"},
+    "Mfas6.0": {"fasta": "Macaca_fascicularis.Macaca_fascicularis_6.0.dna.toplevel.fa.gz",
+                "gtf":   "Macaca_fascicularis.Macaca_fascicularis_6.0.116.gtf.gz"},
+    "Mmul_10": {"fasta": "Macaca_mulatta.Mmul_10.dna.toplevel.fa.gz",
+                "gtf":   "Macaca_mulatta.Mmul_10.116.gtf.gz"},
+}
+
+_LURIA_CONFIG_HEADER = (
+    "// luria.config — local reference genomes for nf-core on MIT Luria.\n"
+    "// Generated from luria.run_script.LURIA_GENOMES. The params.genomes MAP resolution is\n"
+    "// unreliable in Nextflow (getGenomeAttribute returns the value but the workflow assertion\n"
+    "// sees empty), so submit_to_luria ALSO passes explicit --fasta/--gtf on the CLI — that is\n"
+    "// what actually wires the references. This map is kept for --genome key identity.\n"
+)
+
+
+def genome_ref_paths(genome: str, refs_root: str) -> tuple[str | None, str | None]:
+    """Absolute (fasta, gtf) for a genome key under refs_root, or (None, None) when the genome
+    has no local refs registered (caller then falls back to --genome/iGenomes)."""
+    ref = LURIA_GENOMES.get(str(genome or ""))
+    if not ref:
+        return (None, None)
+    root = str(refs_root or "").rstrip("/")
+    return (f"{root}/{ref['fasta']}", f"{root}/{ref['gtf']}")
 
 
 def render_luria_config(refs_root: str) -> str:
-    """Render luria.config (the local reference-genomes map) from its template,
-    substituting REFS_ROOT := <LURIA_WORKING_PATH>/refs. `refs_root` is trusted
-    config (the Luria working_path), not LLM input, but is path-validated
-    fail-closed for defense in depth."""
+    """Generate luria.config (the local reference-genomes map) from LURIA_GENOMES.
+    `refs_root` (:= <LURIA_WORKING_PATH>/refs) is trusted config, path-validated fail-closed."""
     if not refs_root or not _REFS_ROOT_RE.fullmatch(str(refs_root)):
         raise ValueError(f"invalid refs_root {refs_root!r}")
-    text = _LURIA_CONFIG_TEMPLATE.read_text(encoding="utf-8")
-    return text.replace("{{REFS_ROOT}}", str(refs_root).rstrip("/"))
+    root = str(refs_root).rstrip("/")
+    lines = [_LURIA_CONFIG_HEADER, "params {", "    genomes {"]
+    for key, ref in LURIA_GENOMES.items():
+        lines += [f"        '{key}' {{",
+                  f"            fasta = '{root}/{ref['fasta']}'",
+                  f"            gtf   = '{root}/{ref['gtf']}'",
+                  "        }"]
+    lines += ["    }", "}", ""]
+    return "\n".join(lines)
+
+
+_PROC_NAME_RE = re.compile(r"[A-Za-z0-9_]{1,64}")
+_EXT_ARGS_RE = re.compile(r"[A-Za-z0-9_.,=:/ -]{1,200}")
+
+
+def render_process_config(process_args: dict[str, str] | None) -> str:
+    """Render a Nextflow process-scope config from {PROCESS_NAME: ext_args}, e.g.
+    {'SIMPLEAF_QUANT': '--knee'} -> `process { withName: '.*:SIMPLEAF_QUANT' { ext.args='--knee' } }`.
+    The DATA is declared by the curated per-pipeline JSON ('protocol_process_args'), NOT hardcoded
+    here — this is just the renderer. Names/args validated fail-closed. '' for empty input.
+
+    (e.g. scrnaseq seqwell/dropseq declares SIMPLEAF_QUANT '--knee': 2.7.1 needs a cell-calling
+    mode and its unfiltered fallback wants a barcode whitelist bead protocols lack.)"""
+    if not process_args:
+        return ""
+    blocks = []
+    for proc, args in process_args.items():
+        if not _PROC_NAME_RE.fullmatch(str(proc)):
+            raise ValueError(f"invalid process name {proc!r}")
+        if not _EXT_ARGS_RE.fullmatch(str(args)):
+            raise ValueError(f"invalid ext.args {args!r}")
+        blocks.append(f"    withName: '.*:{proc}' {{\n        ext.args = '{args}'\n    }}")
+    return "\nprocess {\n" + "\n".join(blocks) + "\n}\n"
 
 
 def validate_resources(resources: dict | None) -> dict:
@@ -92,12 +154,21 @@ def sanitize_job_name(name: str, fallback: str = "nfcore_run") -> str:
 
 def render_run_script(*, job_name: str, pipeline: str, revision: str, run_dir: str,
                       work_dir: str, singularity_cache: str, genome: str,
-                      resources: dict | None) -> str:
-    """Substitute the validated slots into the fixed run.sh template."""
+                      resources: dict | None, refs_root: str | None = None) -> str:
+    """Substitute the validated slots into the fixed run.sh template. When `refs_root` is given
+    and `genome` has local refs registered (LURIA_GENOMES), explicit --fasta/--gtf flags are
+    injected (path > iGenomes globally; the genomes-map resolution is unreliable)."""
     revision = validate_revision(revision)
     pipeline = validate_pipeline(pipeline)
     genome = validate_genome(genome)
     res = validate_resources(resources)
+    refs_flags = ""
+    if refs_root:
+        if not _REFS_ROOT_RE.fullmatch(str(refs_root)):
+            raise ValueError(f"invalid refs_root {refs_root!r}")
+        fasta, gtf = genome_ref_paths(genome, refs_root)
+        if fasta and gtf:
+            refs_flags = f"--fasta {fasta} --gtf {gtf}"
     mapping = {
         "JOB_NAME": sanitize_job_name(job_name),
         "CPUS": res["cpus"],
@@ -106,6 +177,7 @@ def render_run_script(*, job_name: str, pipeline: str, revision: str, run_dir: s
         "PIPELINE": pipeline,
         "REVISION": revision,
         "GENOME": genome,
+        "REFS_FLAGS": refs_flags,
         "WORK_DIR": work_dir,
         "SINGULARITY_CACHE": singularity_cache,
     }

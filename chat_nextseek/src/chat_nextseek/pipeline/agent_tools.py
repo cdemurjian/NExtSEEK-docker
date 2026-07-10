@@ -37,6 +37,7 @@ from ..seqera.pipeline_params import (
     gencode_for_genome_key,
     load_pipeline_context,
     load_reference_bundles,
+    process_args_for,
     resolve_bundle_for_species,
 )
 from ..seqera.submitter import submit_launch
@@ -574,6 +575,9 @@ def tool_submit_to_luria(config: "ChatConfig", state: dict, tool_input: dict | N
     # (iGenomes, non-GENCODE) but wrong for our local GENCODE refs.
     if "gencode" in launch_params and gencode_for_genome_key(genome):
         launch_params["gencode"] = True
+    # Per-protocol process ext.args the curated pipeline JSON declares (e.g. scrnaseq dropseq ->
+    # SIMPLEAF_QUANT --knee); the submitter renders these into the run's -c config.
+    process_args = process_args_for(state.get("pipeline_key") or "", launch_params.get("protocol"))
     tool_input = tool_input or {}
     try:
         runs = submit_luria(launch, luria_env=luria_env,
@@ -581,7 +585,8 @@ def tool_submit_to_luria(config: "ChatConfig", state: dict, tool_input: dict | N
                             job_name=tool_input.get("job_name"),
                             samplesheet_local=samplesheet,
                             genome=genome,
-                            launch_params=launch_params)
+                            launch_params=launch_params,
+                            process_args=process_args)
     except Exception as exc:
         return json.dumps({"ok": False, "message": f"Luria submit failed: {exc!r}"})
     if not runs:

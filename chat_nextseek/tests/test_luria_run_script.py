@@ -124,3 +124,41 @@ def test_render_luria_config_rejects_bad_refs_root():
     for bad in ("", "/net/x; rm -rf /", "a b", "x`id`"):
         with pytest.raises(ValueError):
             render_luria_config(bad)
+
+
+def test_render_run_script_injects_fasta_gtf_for_known_genome():
+    s = render_run_script(job_name="j", pipeline="nf-core/scrnaseq", revision="2.7.1",
+                          run_dir="/r", work_dir="/w", singularity_cache="/c", genome="Mfas6.0",
+                          resources={}, refs_root="/net/x/refs")
+    assert "--fasta /net/x/refs/Macaca_fascicularis.Macaca_fascicularis_6.0.dna.toplevel.fa.gz" in s
+    assert "--gtf /net/x/refs/Macaca_fascicularis.Macaca_fascicularis_6.0.116.gtf.gz" in s
+    assert "--genome Mfas6.0" in s   # kept alongside the explicit paths
+    assert "{{" not in s and "}}" not in s
+
+
+def test_render_run_script_no_fasta_gtf_for_unregistered_genome():
+    # a genome not in LURIA_GENOMES has no local refs -> no --fasta/--gtf (falls back to --genome)
+    s = render_run_script(job_name="j", pipeline="nf-core/rnaseq", revision="3.16.1",
+                          run_dir="/r", work_dir="/w", singularity_cache="/c", genome="R64-1-1",
+                          resources={}, refs_root="/net/x/refs")
+    assert "--fasta" not in s and "--gtf" not in s
+    assert "--genome R64-1-1" in s and "{{" not in s
+
+
+def test_genome_ref_paths():
+    from chat_nextseek.luria.run_script import genome_ref_paths
+    f, g = genome_ref_paths("GRCm39", "/net/x/refs/")
+    assert f == "/net/x/refs/GRCm39.primary_assembly.genome.fa.gz"
+    assert g == "/net/x/refs/gencode.vM39.basic.annotation.gtf.gz"
+    assert genome_ref_paths("NOPE", "/net/x/refs") == (None, None)
+
+
+def test_render_process_config():
+    from chat_nextseek.luria.run_script import render_process_config
+    cfg = render_process_config({"SIMPLEAF_QUANT": "--knee"})
+    assert "withName: '.*:SIMPLEAF_QUANT'" in cfg and "ext.args = '--knee'" in cfg
+    assert render_process_config({}) == "" and render_process_config(None) == ""
+    with pytest.raises(ValueError):
+        render_process_config({"BAD; rm -rf /": "--knee"})            # unsafe process name
+    with pytest.raises(ValueError):
+        render_process_config({"SIMPLEAF_QUANT": "--knee'; rm -rf /"})  # unsafe ext.args
