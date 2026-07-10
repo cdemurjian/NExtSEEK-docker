@@ -36,20 +36,40 @@ def test_emit_prefers_local_fastq_paths_over_ena_and_writes_lf(tmp_path):
         ENAResolution(accession="SRR2", missing=False, reason="", runs=[ENARun(
             run_accession="SRR2", fastq_1="ftp://ena2_1.fq.gz", fastq_2="ftp://ena2_2.fq.gz", layout="PAIRED")]),
     ]
-    acc_meta = {"SRR1": {"File_PrimaryData": "/net/luria/S1_1.fastq.gz",
-                         "File_SecondaryData": "/net/luria/S1_2.fastq.gz"}}  # SRR2 has no local path
+    # Messy real-world metadata: the fastq PATH lives in Link_*, File_* holds the bare accession,
+    # Checksum_* holds hashes. The emitter must pick by value (a fastq path), field-name-agnostic.
+    acc_meta = {"SRR1": {
+        "Link_PrimaryData": "/net/luria/S1_1.fastq.gz",     # R1 path -> should win
+        "Link_SecondaryData": "/net/luria/S1_2.fastq.gz",   # R2 path
+        "File_PrimaryData": "SRR1",                         # bare accession -> must be skipped
+        "Checksum_PrimaryData": "abc123;def456",            # hashes -> must be skipped
+    }}  # SRR2 has no usable path anywhere -> ENA fallback
     emit_nfcore_artifacts(tmp_path, pipeline="rnaseq", samplesheet_rows=rows,
                           resolutions=resolutions, accession_metadata=acc_meta,
                           launch_plan=None, tower_env={})
-    sheet = (tmp_path / "samplesheet.csv").read_text()
-    # SRR1: local paths used, ENA URL not present
-    assert "/net/luria/S1_1.fastq.gz" in sheet and "/net/luria/S1_2.fastq.gz" in sheet
-    assert "ftp://ena1_1.fq.gz" not in sheet
-    # SRR2: no local path -> ENA fallback
-    assert "ftp://ena2_1.fq.gz" in sheet
-    # CRLF fix: plain LF, no stray carriage returns
-    raw = (tmp_path / "samplesheet.csv").read_bytes()
-    assert b"\r" not in raw
+    lines = (tmp_path / "samplesheet.csv").read_text().splitlines()
+    srr1 = next(l for l in lines if l.startswith("S1,"))
+    # SRR1: picked the Link_* paths by value; the accession/checksum fields were skipped
+    assert srr1.split(",")[1] == "/net/luria/S1_1.fastq.gz"
+    assert srr1.split(",")[2] == "/net/luria/S1_2.fastq.gz"
+    assert "ftp://ena1_1.fq.gz" not in "\n".join(lines)
+    # SRR2: nothing usable -> ENA fallback
+    assert any(l.startswith("S2,") and "ftp://ena2_1.fq.gz" in l for l in lines)
+    # CRLF fix: plain LF
+    assert b"\r" not in (tmp_path / "samplesheet.csv").read_bytes()
+
+
+def test_fastq_from_meta_picks_path_skips_accession_and_checksum():
+    from chat_nextseek.seqera.emitter import _fastq_from_meta
+    meta = {"File_PrimaryData": "SRR9", "Checksum_PrimaryData": "a;b",
+            "Link_PrimaryData": "/net/x/SRR9_1.fastq.gz",
+            "Link_SecondaryData": "https://ebi/SRR9_2.fastq.gz"}
+    assert _fastq_from_meta(meta, "primary") == "/net/x/SRR9_1.fastq.gz"   # path, not accession/hash
+    assert _fastq_from_meta(meta, "secondary") == "https://ebi/SRR9_2.fastq.gz"  # url ok when no local
+    assert _fastq_from_meta({"File_PrimaryData": "SRR9"}, "primary") == ""  # bare accession -> nothing
+    # prefer a local path over a URL when both are present under the same hint
+    meta2 = {"Link_PrimaryData": "https://ebi/x_1.fastq.gz", "File_PrimaryData": "/net/x_1.fastq.gz"}
+    assert _fastq_from_meta(meta2, "primary") == "/net/x_1.fastq.gz"
 
 
 def test_emit_launch_artifacts_alone_writes_yamls(tmp_path):

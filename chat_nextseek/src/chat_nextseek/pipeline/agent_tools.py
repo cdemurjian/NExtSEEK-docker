@@ -301,18 +301,13 @@ def tool_resolve_samples(config: "ChatConfig", session, state: dict, tool_input:
         all_uids.add(leaf["uid"])
         all_accs.update(accs)
         flat = _flatten_lineage(leaf["uid"], uid_index) if uid_index else (leaf.get("metadata") or {})
-        # Capture curated local fastq paths (File_PrimaryData=R1, File_SecondaryData=R2), keyed by
-        # accession (the emitter's lookup key), so the emitter can prefer them over a synthesized
-        # ENA URL. ENA stays the fallback when these are empty.
-        _meta = leaf.get("metadata") or {}
-        _fp = flat.get("File_PrimaryData") or _meta.get("File_PrimaryData")
-        _fs = flat.get("File_SecondaryData") or _meta.get("File_SecondaryData")
-        if _fp or _fs:
+        # Stash the leaf's FULL metadata per accession (the emitter's lookup key) so the emitter
+        # can find the fastq paths in whatever fields hold them (Link_PrimaryData / File_* / etc.)
+        # by value, not a hardcoded field name. ENA URL stays the fallback when none is found.
+        _meta = {**(flat if isinstance(flat, dict) else {}), **(leaf.get("metadata") or {})}
+        if _meta and accs:
             for _a in accs:
-                file_paths_by_acc[str(_a).strip()] = {
-                    "File_PrimaryData": _fp or "",
-                    "File_SecondaryData": _fs or "",
-                }
+                file_paths_by_acc[str(_a).strip()] = dict(_meta)
         # Generically detect species: any flattened value that maps to a reference
         # bundle is a species vote (no hardcoded field name).
         for val in flat.values():

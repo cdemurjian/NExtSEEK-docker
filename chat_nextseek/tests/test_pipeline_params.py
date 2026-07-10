@@ -25,18 +25,17 @@ def test_rnaseq_has_curated_params_and_reference_resources():
 def test_scrnaseq_has_curated_params_and_reference_resources():
     doc = _load("scrnaseq")
     params = doc["params"]
-    # simpleaf (alevin-fry) is the current nf-core/scrnaseq aligner value + default;
-    # the old "alevin" value is no longer valid upstream.
-    assert "simpleaf" in params["aligner"]["allowed"]
-    assert params["aligner"]["default"] == "simpleaf"
-    assert "alevin" not in params["aligner"]["allowed"]
+    # alevin (salmon alevin) is the aligner value + default in the PINNED scrnaseq 2.7.1;
+    # 'simpleaf' is the 3.x rename and would fail param validation on 2.7.1.
+    assert "alevin" in params["aligner"]["allowed"]
+    assert params["aligner"]["default"] == "alevin"
+    assert "simpleaf" not in params["aligner"]["allowed"]
     assert params["protocol"]["default"] == "auto"
-    # Seq-Well / Drop-seq bead chemistry: dropseq preset + explicit simpleaf geometry
-    # (12bp cell barcode + 8bp UMI on R1, cDNA on R2) both selectable via --protocol.
+    # Seq-Well / Drop-seq bead chemistry: 'dropseq' protocol passed to alevin.
     assert "dropseq" in params["protocol"]["allowed"]
-    assert "1{b[12]u[8]x:}2{r:}" in params["protocol"]["allowed"]
     assert "barcode_whitelist" in params
-    assert doc["protocol_presets"]["seqwell"]["geometry"] == "1{b[12]u[8]x:}2{r:}"
+    assert doc["protocol_presets"]["seqwell"]["protocol"] == "dropseq"
+    assert doc["protocol_presets"]["seqwell"]["aligner"] == "alevin"
     assert "expected_cells" not in params
     assert doc["reference_resources"] == ["fasta", "gtf", "salmon_index", "star_index", "txp2gene"]
 
