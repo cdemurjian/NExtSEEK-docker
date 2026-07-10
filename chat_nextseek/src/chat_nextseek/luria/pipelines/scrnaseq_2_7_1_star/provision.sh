@@ -17,7 +17,8 @@ if [ ! -d "$DEST/.git" ]; then
     git clone --branch "$TAG" --depth 1 https://github.com/nf-core/scrnaseq "$DEST"
 else
     echo "[provision] clone exists; resetting patched files to stock ${TAG}"
-    git -C "$DEST" checkout -- assets/protocols.json modules/local/star_align.nf
+    # Luria's git is old (no `git -C`); cd into the clone instead.
+    ( cd "$DEST" && git checkout -- assets/protocols.json modules/local/star_align.nf )
 fi
 
 python3 - "$DEST" <<'PY'
