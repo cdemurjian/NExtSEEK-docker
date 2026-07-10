@@ -18,8 +18,8 @@
     "dropseq": {"protocol": "dropseq", "aligner": "alevin", "barcode_whitelist": null}
   },
   "protocol_process_args": {
-    "_comment": "Per-protocol Nextflow process ext.args, applied via a -c config at submit time (luria.submitter). Keyed by the --protocol value. Seq-Well/Drop-seq has no barcode whitelist, so simpleaf's cell-calling needs a mode; --knee (knee-point) is the whitelist-free choice. NOT needed for 10x (uses the whitelist path).",
-    "dropseq": {"SIMPLEAF_QUANT": "--knee"}
+    "_comment": "Per-protocol Nextflow process ext.args, applied via a -c config at submit time (luria.submitter). Keyed by the --protocol value; value is {PROCESS: ext_args}. A -c override REPLACES the process's ext.args (Nextflow can't append), so the value must INCLUDE the pipeline's base ext.args for that process plus your additions. For pinned scrnaseq 2.7.1, SIMPLEAF_QUANT's base is '-r cr-like' (the --resolution). Seq-Well/Drop-seq has no barcode whitelist, so the alevin quantifier also needs a cell-calling mode (--knee, whitelist-free knee-point) -> '-r cr-like --knee'. 10x needs no entry (base '-r cr-like' + the whitelist path apply by default). aligner=star: do NOT add STAR_ALIGN here (non-empty ext.args default it would clobber) — STARsolo tunes cell-calling via the samplesheet expected_cells column and defaults to a knee-based --soloCellFilter.",
+    "dropseq": {"SIMPLEAF_QUANT": "-r cr-like --knee"}
   },
   "pipeline": {
     "name": "nf-core/scrnaseq",

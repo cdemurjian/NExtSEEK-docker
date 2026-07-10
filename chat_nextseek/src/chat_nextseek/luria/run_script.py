@@ -108,21 +108,35 @@ def render_luria_config(refs_root: str) -> str:
 _PROC_NAME_RE = re.compile(r"[A-Za-z0-9_]{1,64}")
 _EXT_ARGS_RE = re.compile(r"[A-Za-z0-9_.,=:/ -]{1,200}")
 
+# A -c config REPLACES a process's ext.args (Nextflow can't append across configs — VERIFIED on
+# Luria: a self-referencing closure StackOverflows, a plain string clobbers). So overriding ext.args
+# is only safe for processes whose PIPELINE default is empty (e.g. alevin's SIMPLEAF_QUANT). These
+# processes have a NON-empty default in nf-core/scrnaseq — overriding them would drop needed flags.
+# Tune them via the samplesheet instead: STAR (STAR_ALIGN) cell-calling reads `expected_cells` and
+# otherwise uses STAR's built-in knee-based --soloCellFilter, so it needs no ext.args override.
+_CLOBBER_UNSAFE_PROCESSES = {"STAR_ALIGN"}
+
 
 def render_process_config(process_args: dict[str, str] | None) -> str:
     """Render a Nextflow process-scope config from {PROCESS_NAME: ext_args}, e.g.
     {'SIMPLEAF_QUANT': '--knee'} -> `process { withName: '.*:SIMPLEAF_QUANT' { ext.args='--knee' } }`.
     The DATA is declared by the curated per-pipeline JSON ('protocol_process_args'), NOT hardcoded
-    here — this is just the renderer. Names/args validated fail-closed. '' for empty input.
+    here — this is just the renderer. Names/args validated fail-closed; raises for a process whose
+    pipeline ext.args default is non-empty (would be clobbered). '' for empty input.
 
     (e.g. scrnaseq seqwell/dropseq declares SIMPLEAF_QUANT '--knee': 2.7.1 needs a cell-calling
-    mode and its unfiltered fallback wants a barcode whitelist bead protocols lack.)"""
+    mode and its unfiltered fallback wants a barcode whitelist bead protocols lack. STAR is fine
+    without an override — it tunes cell-calling via the samplesheet `expected_cells` column.)"""
     if not process_args:
         return ""
     blocks = []
     for proc, args in process_args.items():
         if not _PROC_NAME_RE.fullmatch(str(proc)):
             raise ValueError(f"invalid process name {proc!r}")
+        if str(proc) in _CLOBBER_UNSAFE_PROCESSES:
+            raise ValueError(
+                f"process {proc!r} has a non-empty pipeline ext.args default a -c override would "
+                "clobber (Nextflow can't append); tune it via the samplesheet (e.g. expected_cells) instead")
         if not _EXT_ARGS_RE.fullmatch(str(args)):
             raise ValueError(f"invalid ext.args {args!r}")
         blocks.append(f"    withName: '.*:{proc}' {{\n        ext.args = '{args}'\n    }}")

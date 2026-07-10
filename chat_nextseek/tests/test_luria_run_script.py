@@ -162,3 +162,7 @@ def test_render_process_config():
         render_process_config({"BAD; rm -rf /": "--knee"})            # unsafe process name
     with pytest.raises(ValueError):
         render_process_config({"SIMPLEAF_QUANT": "--knee'; rm -rf /"})  # unsafe ext.args
+    with pytest.raises(ValueError):
+        # STAR_ALIGN has a non-empty pipeline ext.args default -> overriding would clobber it;
+        # the renderer refuses (STAR cell-calling is tuned via samplesheet expected_cells, not here).
+        render_process_config({"STAR_ALIGN": "--soloCellFilter EmptyDrops_CR"})

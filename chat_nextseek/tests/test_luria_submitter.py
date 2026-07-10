@@ -184,13 +184,14 @@ def test_submit_luria_scrnaseq_injects_fasta_gtf_and_knee_config(tmp_path, monke
     monkeypatch.setattr(sub, "scp_file", fake_scp)
     sub.submit_luria(str(tmp_path / "launch.yml"), luria_env=LE, samplesheet_local=str(real_sheet),
                      genome="Mfas6.0", launch_params={"protocol": "dropseq"},
-                     process_args={"SIMPLEAF_QUANT": "--knee"})
+                     process_args={"SIMPLEAF_QUANT": "-r cr-like --knee"})
     # run.sh: explicit --fasta/--gtf for Mfas6.0 (LE working_path=/net/x -> /net/x/refs), path > iGenomes
     assert "--fasta /net/x/refs/Macaca_fascicularis.Macaca_fascicularis_6.0.dna.toplevel.fa.gz" in staged["run_sh"]
     assert "--gtf /net/x/refs/Macaca_fascicularis.Macaca_fascicularis_6.0.116.gtf.gz" in staged["run_sh"]
-    # luria.config: genomes map + the curated per-protocol SIMPLEAF_QUANT --knee block
+    # luria.config: genomes map + the SIMPLEAF_QUANT block keeping the base '-r cr-like' + --knee
     assert "'Mfas6.0'" in staged["config"]
-    assert "withName: '.*:SIMPLEAF_QUANT'" in staged["config"] and "ext.args = '--knee'" in staged["config"]
+    assert "withName: '.*:SIMPLEAF_QUANT'" in staged["config"]
+    assert "ext.args = '-r cr-like --knee'" in staged["config"]
 
 
 def test_submit_luria_threads_genome_into_runsh(tmp_path, monkeypatch):

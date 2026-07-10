@@ -42,8 +42,9 @@ def test_scrnaseq_has_curated_params_and_reference_resources():
 
 def test_process_args_for():
     from chat_nextseek.seqera.pipeline_params import process_args_for
-    # scrnaseq.json declares dropseq (seqwell, no whitelist) needs SIMPLEAF_QUANT --knee
-    assert process_args_for("scrnaseq", "dropseq") == {"SIMPLEAF_QUANT": "--knee"}
+    # scrnaseq.json declares dropseq (seqwell): SIMPLEAF_QUANT keeps the pipeline base '-r cr-like'
+    # (--resolution, else the run crashes) AND adds --knee (whitelist-free cell-calling).
+    assert process_args_for("scrnaseq", "dropseq") == {"SIMPLEAF_QUANT": "-r cr-like --knee"}
     assert process_args_for("scrnaseq", "auto") == {}      # 10x -> whitelist path, no knee
     assert process_args_for("scrnaseq", None) == {}
     assert process_args_for("rnaseq", "dropseq") == {}     # rnaseq declares no process_args
