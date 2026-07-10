@@ -92,42 +92,6 @@ def start(session, config: "ChatConfig", *, user_query: str, parser_plan: Any = 
     return _run_loop(session, config, log_dir=log_dir)
 
 
-def start_from_cohort(session, config: "ChatConfig", *, uids: list[str], pipeline_key: str,
-                      user_query: str = "", log_dir: str | None = None) -> dict[str, Any]:
-    """Prime a pipeline conversation from an explicit cohort — WITHOUT running the loop.
-
-    Bridge entry for the Container-CC handoff. Unlike ``start`` (called mid-turn,
-    already on the NS route), this is invoked over HTTP by the CC ``nextseek-pipeline``
-    bin, whose client read-timeout (~30s) is far shorter than a Bedrock tool-loop —
-    running the loop here ReadTimeouts the bin (the server finishes but the caller
-    has given up). So we only SEED the wizard state (fast, deterministic) and return
-    an opening message; the first agent loop runs on the next NS turn via
-    ``handle_turn`` (the router keeps that turn on the NS side while ``is_active``).
-    ``resolved.uids`` + the UID-bearing opening message let that loop resolve the cohort.
-
-    ``config``/``log_dir`` are accepted for call-site symmetry with ``start`` but are
-    unused in seed-only mode (no LLM call happens here).
-    """
-    state = {
-        "active": True,
-        "messages": [{"role": "user",
-                      "content": user_query or (
-                          f"Launch {pipeline_key} on these NExtSEEK samples — resolve them with "
-                          f"resolve_samples(kind='explicit_uids'): {', '.join(uids)}")}],
-        "resolved": {"uids": list(uids), "accessions": []},
-        "artifacts": {},
-        "pipeline_key": pipeline_key,
-    }
-    _save(session, state)
-    return {
-        "action": "ask",
-        "reply": (f"Primed {len(uids)} sample(s) for the {pipeline_key} pipeline. "
-                  f"Reply to continue and I'll resolve them and propose the run "
-                  f"(genome, params) before launching."),
-        "params": None,
-    }
-
-
 def handle_turn(session, config: "ChatConfig", user_text: str, *, log_dir: str | None = None) -> dict[str, Any]:
     state = _state(session)
     if not state.get("active"):

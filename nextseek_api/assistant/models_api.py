@@ -317,33 +317,6 @@ class SubmissionRequest(BaseModel):
         return v
 
 
-class PipelineOpRequest(BaseModel):
-    """POST /assistant/pipeline/ body — seed pipeline_agent from a CC-resolved cohort."""
-    session_id: UUID = Field(..., description="Chat session to seed (required).")
-    uids: str = Field(..., description="Comma-separated NExtSEEK sample UID list.")
-    pipeline: str = Field(..., description="nf-core pipeline key, e.g. 'rnaseq'.")
-    use_prod: bool = False
-    model_config = ConfigDict(extra="forbid")
-
-    @field_validator("pipeline")
-    @classmethod
-    def _pipeline(cls, v: str) -> str:
-        v = (v or "").strip().lower()
-        if not v:
-            raise ValueError("pipeline is required")
-        return v
-
-    @field_validator("uids")
-    @classmethod
-    def _uids(cls, v: str) -> str:
-        if not [u for u in (v or "").split(",") if u.strip()]:
-            raise ValueError("uids must contain at least one UID")
-        return v
-
-    def uid_list(self) -> list[str]:
-        return [u.strip() for u in self.uids.split(",") if u.strip()]
-
-
 # --- Response models (typed envelope over a lenient result) ---
 
 class EntityItemModel(BaseModel):

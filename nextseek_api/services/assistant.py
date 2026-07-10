@@ -77,7 +77,6 @@ from nextseek_api.assistant.models_api import (
     OpErrorResponse,
     ParseOpRequest,
     ParseOpResponse,
-    PipelineOpRequest,
     ReportOpRequest,
     ReportOpResponse,
     SubmissionRequest,
@@ -97,8 +96,6 @@ from nextseek_api.helpers import resolve_seek_auth, SeekAPIClient
 
 from chat_nextseek.orchestrator import run_query, run_query_plan, run_pipeline_launch
 from chat_nextseek.config import ChatConfig
-from chat_nextseek.pipeline import agent as pipeline_agent
-from chat_nextseek.seqera.catalog import get_pipeline_entry, list_pipeline_keys
 from nextseek_api.assistant.session_adapter import DictSessionAdapter
 from nextseek_api.assistant.pipeline_adapter import make_db_event_callback
 
@@ -1276,50 +1273,6 @@ class AssistantViewSet(viewsets.ViewSet):
     @action(detail=False, methods=["post"], url_path="entity")
     def entity(self, request):
         return self._run_granular_op(request, "entity")
-
-    @action(detail=False, methods=["post"], url_path="pipeline")
-    def pipeline(self, request):
-        """Seed pipeline_agent from a CC-resolved cohort and start the wizard.
-
-        Session-bound bridge op: the sandboxed CC agent calls this (via the
-        nextseek-pipeline bin) after resolving a sample cohort, handing that
-        cohort to chat_nextseek's pipeline_agent. Returns the wizard's opening
-        message; the interactive confirm/launch turns then run on the NS route
-        (the CC router forces NS while pipeline_agent.is_active — see Task 4)."""
-        try:
-            req = PipelineOpRequest(**request.data)
-        except ValidationError as exc:
-            return _op_error_response("BAD_REQUEST", str(exc), status.HTTP_400_BAD_REQUEST)
-
-        try:
-            get_pipeline_entry(req.pipeline)
-        except KeyError:
-            return _op_error_response(
-                "UNKNOWN_PIPELINE",
-                f"unknown pipeline {req.pipeline!r}; known: {list_pipeline_keys()}",
-                status.HTTP_400_BAD_REQUEST)
-
-        try:
-            chat_session = ChatSession.objects.get(session_id=req.session_id, user=request.user)
-        except ChatSession.DoesNotExist:
-            return _op_error_response(
-                "SESSION_NOT_FOUND", "no such chat session for this user",
-                status.HTTP_404_NOT_FOUND)
-
-        chat_config = _granular_chat_config(request, req)
-        adapter = DictSessionAdapter(chat_session)
-        try:
-            result = pipeline_agent.start_from_cohort(
-                adapter, chat_config, uids=req.uid_list(), pipeline_key=req.pipeline)
-            adapter.save()
-        except Exception as exc:  # noqa: BLE001
-            return _op_error_response("AGENT_FAILED", str(exc), status.HTTP_502_BAD_GATEWAY)
-        return Response({
-            "reply": result.get("reply", ""),
-            "action": result.get("action"),
-            "pipeline": req.pipeline,
-            "primed_uid_count": len(req.uid_list()),
-        })
 
     @extend_schema(
         operation_id="Assistant: Parse",
