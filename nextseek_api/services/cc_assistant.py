@@ -76,6 +76,14 @@ MAX_CC_CHAT_LOG_TURNS = 50  # match chat_nextseek/chat_memory.py MAX_TURNS
 
 def _append_cc_turn_complete(payload: TurnCompletePayload) -> None:
     session = payload.chat_session
+    # This ChatSession object was loaded at CC-turn start. During the turn the
+    # agent's nextseek-pipeline op seeds extra_state.pipeline_agent via a nested
+    # query/async request on the SAME session (a different ORM object). Reload
+    # extra_state so this whole-column read-modify-write MERGES onto that seed
+    # instead of clobbering it — the seed is what the F9 router gate reads next
+    # turn to keep the pipeline wizard on the NS side. Mirrors
+    # _persist_cc_session_id's refresh-before-write.
+    session.refresh_from_db(fields=["extra_state"])
     session.extra_state = apply_turn_to_extra_state(
         session.extra_state, payload, cap=MAX_CC_CHAT_LOG_TURNS)
     session.save(update_fields=["extra_state", "updated_at"])
