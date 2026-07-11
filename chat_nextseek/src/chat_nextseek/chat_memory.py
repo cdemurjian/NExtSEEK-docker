@@ -141,8 +141,17 @@ def append_turn(
     if not isinstance(log, list):
         log = []
 
+    # The chat_log is SHARED with the Container-CC path, which records its turns
+    # with string UUID turn_ids (cc_turn_complete.serialize_cc_chat_log_entry ->
+    # turn_id = str(run_id)). Deriving the next id from log[-1]["turn_id"] + 1 did
+    # `str + 1` -> TypeError whenever an NS turn (e.g. run_pipeline_launch) followed
+    # a CC turn. Compute the next int id from the highest int id present, ignoring
+    # CC string ids, so NS turns stay a monotonic int sequence regardless of
+    # interleaved CC turns.
+    _int_ids = [t["turn_id"] for t in log
+                if isinstance(t, dict) and isinstance(t.get("turn_id"), int)]
     turn = {
-        "turn_id": (log[-1]["turn_id"] + 1) if log and isinstance(log[-1], dict) and "turn_id" in log[-1] else 1,
+        "turn_id": (max(_int_ids) + 1) if _int_ids else 1,
         "ts": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "user_query": _truncate(user_query, 500),
         "intent_summary": _truncate(intent_summary, 240),
