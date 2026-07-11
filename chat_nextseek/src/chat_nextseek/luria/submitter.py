@@ -135,7 +135,7 @@ def _submit_one(entry, idx, parent, working, luria_env, resources, job_name, key
         run_sh = render_run_script(
             job_name=safe, pipeline=pipeline, revision=revision, run_dir=remote_run_dir,
             work_dir=work_dir, singularity_cache=cache_dir, genome=run_genome, resources=resources,
-            refs_root=refs_root,
+            refs_root=refs_root, aligner=(launch_params or {}).get("aligner"), working=working,
         )
         run_tmp = _write_temp(run_sh, prefix="run_", suffix=".sh"); tmp_files.append(run_tmp)
         # luria.config = genomes map + any curated per-protocol process ext.args (e.g. seqwell/dropseq

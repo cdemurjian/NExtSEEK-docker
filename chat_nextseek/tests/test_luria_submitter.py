@@ -194,6 +194,47 @@ def test_submit_luria_scrnaseq_injects_fasta_gtf_and_knee_config(tmp_path, monke
     assert "ext.args = '-r cr-like --knee'" in staged["config"]
 
 
+def test_submit_luria_scrnaseq_star_runsh_uses_vendored_clone(tmp_path, monkeypatch):
+    real_sheet = tmp_path / "samplesheet.csv"
+    real_sheet.write_text("sample,fastq_1\nA,a.fq.gz\n")
+    (tmp_path / "launch.yml").write_text(yaml.safe_dump({"launch": [{
+        "name": "nfcore_scrnaseq", "pipeline": "https://github.com/nf-core/scrnaseq", "revision": "2.7.1"}]}))
+    staged = {}
+    monkeypatch.setattr(sub, "prepare_key", lambda k: "/tmp/fake_key")
+    monkeypatch.setattr(sub, "ssh_run", lambda le, cmd, *, key_path: "Submitted batch job 6\n")
+
+    def fake_scp(le, local, remote, *, key_path):
+        if remote.endswith("/run.sh"):
+            staged["run_sh"] = Path(local).read_text()
+
+    monkeypatch.setattr(sub, "scp_file", fake_scp)
+    # aligner=star -> route to the vendored patched clone (LE working_path=/net/x), no -r
+    sub.submit_luria(str(tmp_path / "launch.yml"), luria_env=LE, samplesheet_local=str(real_sheet),
+                     genome="Mfas6.0", launch_params={"aligner": "star", "protocol": "dropseq"})
+    assert "nextflow run /net/x/pipelines/scrnaseq-2.7.1-star-patched -profile singularity" in staged["run_sh"]
+    assert "-r 2.7.1" not in staged["run_sh"]
+
+
+def test_submit_luria_scrnaseq_alevin_runsh_uses_stock_remote(tmp_path, monkeypatch):
+    real_sheet = tmp_path / "samplesheet.csv"
+    real_sheet.write_text("sample,fastq_1\nA,a.fq.gz\n")
+    (tmp_path / "launch.yml").write_text(yaml.safe_dump({"launch": [{
+        "name": "nfcore_scrnaseq", "pipeline": "nf-core/scrnaseq", "revision": "2.7.1"}]}))
+    staged = {}
+    monkeypatch.setattr(sub, "prepare_key", lambda k: "/tmp/fake_key")
+    monkeypatch.setattr(sub, "ssh_run", lambda le, cmd, *, key_path: "Submitted batch job 8\n")
+
+    def fake_scp(le, local, remote, *, key_path):
+        if remote.endswith("/run.sh"):
+            staged["run_sh"] = Path(local).read_text()
+
+    monkeypatch.setattr(sub, "scp_file", fake_scp)
+    sub.submit_luria(str(tmp_path / "launch.yml"), luria_env=LE, samplesheet_local=str(real_sheet),
+                     genome="Mfas6.0", launch_params={"aligner": "alevin", "protocol": "dropseq"})
+    assert "nextflow run nf-core/scrnaseq -r 2.7.1 -profile singularity" in staged["run_sh"]
+    assert "/pipelines/scrnaseq-2.7.1-star-patched" not in staged["run_sh"]
+
+
 def test_submit_luria_threads_genome_into_runsh(tmp_path, monkeypatch):
     real_sheet = tmp_path / "samplesheet.csv"
     real_sheet.write_text("sample,fastq_1\nA,a.fq.gz\n")

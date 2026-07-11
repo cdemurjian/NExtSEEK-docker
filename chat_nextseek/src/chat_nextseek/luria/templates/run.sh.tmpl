@@ -34,7 +34,7 @@ cd {{RUN_DIR}}
 # from luria.config (-c). The CLI flags below (--input/--outdir/--genome)
 # override params.yml so the run uses the staged samplesheet, this run dir, and
 # the species-resolved genome key.
-nextflow run {{PIPELINE}} -r {{REVISION}} -profile singularity \
+nextflow run {{PIPELINE}}{{REVISION_FLAG}} -profile singularity \
     -c luria.config \
     -params-file params.yml \
     --input samplesheet.csv \

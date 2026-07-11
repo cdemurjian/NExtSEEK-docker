@@ -166,3 +166,57 @@ def test_render_process_config():
         # STAR_ALIGN has a non-empty pipeline ext.args default -> overriding would clobber it;
         # the renderer refuses (STAR cell-calling is tuned via samplesheet expected_cells, not here).
         render_process_config({"STAR_ALIGN": "--soloCellFilter EmptyDrops_CR"})
+
+
+# --- Phase 2: per-aligner vendored-pipeline source selection ---
+
+def test_resolve_pipeline_source_star_uses_vendored_clone_no_revision():
+    from chat_nextseek.luria.run_script import resolve_pipeline_source
+    source, flag = resolve_pipeline_source(
+        "nf-core/scrnaseq", "star", "2.7.1", "/net/bmc-pub10/data1/bmc/pipeline_cd")
+    assert source == "/net/bmc-pub10/data1/bmc/pipeline_cd/pipelines/scrnaseq-2.7.1-star-patched"
+    # a `-r <tag>` on a local git clone would checkout the tag and WIPE the patches
+    assert flag == ""
+
+
+def test_resolve_pipeline_source_stock_when_aligner_not_registered():
+    from chat_nextseek.luria.run_script import resolve_pipeline_source
+    source, flag = resolve_pipeline_source(
+        "nf-core/scrnaseq", "alevin", "2.7.1", "/net/bmc-pub10/data1/bmc/pipeline_cd")
+    assert source == "nf-core/scrnaseq"
+    assert flag == "-r 2.7.1"
+
+
+def test_resolve_pipeline_source_normalizes_github_url():
+    from chat_nextseek.luria.run_script import resolve_pipeline_source
+    for pipeline in ("https://github.com/nf-core/scrnaseq", "https://github.com/nf-core/scrnaseq.git"):
+        source, flag = resolve_pipeline_source(pipeline, "star", "2.7.1", "/net/x")
+        assert source == "/net/x/pipelines/scrnaseq-2.7.1-star-patched"
+        assert flag == ""
+
+
+def test_resolve_pipeline_source_stock_when_no_working():
+    # without a working path we cannot build the clone path -> fall back to stock
+    from chat_nextseek.luria.run_script import resolve_pipeline_source
+    source, flag = resolve_pipeline_source("nf-core/scrnaseq", "star", "2.7.1", None)
+    assert source == "nf-core/scrnaseq" and flag == "-r 2.7.1"
+
+
+def test_render_run_script_star_points_at_vendored_clone_no_r():
+    s = render_run_script(job_name="j", pipeline="nf-core/scrnaseq", revision="2.7.1",
+                          run_dir="/r", work_dir="/w", singularity_cache="/c", genome="Mfas6.0",
+                          resources={}, refs_root="/net/x/refs", aligner="star",
+                          working="/net/bmc-pub10/data1/bmc/pipeline_cd")
+    assert ("nextflow run /net/bmc-pub10/data1/bmc/pipeline_cd/pipelines/scrnaseq-2.7.1-star-patched "
+            "-profile singularity") in s
+    assert "-r 2.7.1" not in s          # local clone: NO -r (would wipe the patches)
+    assert "{{" not in s and "}}" not in s
+
+
+def test_render_run_script_alevin_uses_stock_remote_with_r():
+    s = render_run_script(job_name="j", pipeline="nf-core/scrnaseq", revision="2.7.1",
+                          run_dir="/r", work_dir="/w", singularity_cache="/c", genome="Mfas6.0",
+                          resources={}, refs_root="/net/x/refs", aligner="alevin",
+                          working="/net/bmc-pub10/data1/bmc/pipeline_cd")
+    assert "nextflow run nf-core/scrnaseq -r 2.7.1 -profile singularity" in s
+    assert "/pipelines/scrnaseq-2.7.1-star-patched" not in s

@@ -166,16 +166,59 @@ def sanitize_job_name(name: str, fallback: str = "nfcore_run") -> str:
     return cleaned or fallback
 
 
+# Vendored, locally-patched pipeline clones on Luria that REPLACE the stock remote pipeline for a
+# specific (pipeline, aligner). Keyed general so a future patched pipeline is one more entry. Needed
+# where the stock nf-core pipeline can't run a case: nf-core/scrnaseq 2.7.1 STARsolo has no
+# whitelist-less bead-protocol support (hardcoded --soloCBwhitelist + missing dropseq geometry), so
+# `aligner=star` runs a clone patched for `--soloCBwhitelist None` + seqwell 12/8 geometry. alevin is
+# unaffected (stays on the stock remote). Provision with luria/pipelines/scrnaseq_2_7_1_star/provision.sh.
+LURIA_VENDORED_PIPELINES: dict[tuple[str, str], dict[str, str]] = {
+    ("nf-core/scrnaseq", "star"): {
+        "path": "{WORKING}/pipelines/scrnaseq-2.7.1-star-patched",
+        "base": "nf-core/scrnaseq",
+        "revision": "2.7.1",
+    },
+}
+
+_GITHUB_PREFIX_RE = re.compile(r"^https?://github\.com/")
+
+
+def _normalize_pipeline_name(pipeline: str) -> str:
+    """Reduce a pipeline field ('nf-core/scrnaseq' or 'https://github.com/nf-core/scrnaseq[.git]')
+    to the bare 'org/name' used as the vendored-registry key."""
+    p = _GITHUB_PREFIX_RE.sub("", str(pipeline or "").strip())
+    return p[:-4] if p.endswith(".git") else p
+
+
+def resolve_pipeline_source(pipeline: str, aligner: str | None, revision: str,
+                            working: str | None) -> tuple[str, str]:
+    """Return (source, revision_flag) for the `nextflow run` invocation. For a registered
+    (pipeline, aligner) vendored clone, source is the LOCAL clone path and revision_flag is '' — a
+    `-r <tag>` on a local git clone would `git checkout` the tag and WIPE the patches. Otherwise
+    source is the stock pipeline and revision_flag is '-r <revision>'. Falls back to stock when no
+    working path is available (the clone path can't be built)."""
+    entry = LURIA_VENDORED_PIPELINES.get((_normalize_pipeline_name(pipeline), str(aligner or "")))
+    if entry and working:
+        return entry["path"].format(WORKING=str(working).rstrip("/")), ""
+    return str(pipeline), f"-r {revision}"
+
+
 def render_run_script(*, job_name: str, pipeline: str, revision: str, run_dir: str,
                       work_dir: str, singularity_cache: str, genome: str,
-                      resources: dict | None, refs_root: str | None = None) -> str:
+                      resources: dict | None, refs_root: str | None = None,
+                      aligner: str | None = None, working: str | None = None) -> str:
     """Substitute the validated slots into the fixed run.sh template. When `refs_root` is given
     and `genome` has local refs registered (LURIA_GENOMES), explicit --fasta/--gtf flags are
-    injected (path > iGenomes globally; the genomes-map resolution is unreliable)."""
+    injected (path > iGenomes globally; the genomes-map resolution is unreliable). When
+    (pipeline, aligner) has a vendored clone registered (LURIA_VENDORED_PIPELINES) and `working`
+    is given, the run uses that local clone with NO `-r` (else the tag checkout wipes the patches)."""
     revision = validate_revision(revision)
     pipeline = validate_pipeline(pipeline)
     genome = validate_genome(genome)
     res = validate_resources(resources)
+    source, rev = resolve_pipeline_source(pipeline, aligner, revision, working)
+    source = validate_pipeline(source)          # clone path or stock name; both match _PIPELINE_RE
+    revision_flag = f" {rev}" if rev else ""     # leading space only when present -> no double space
     refs_flags = ""
     if refs_root:
         if not _REFS_ROOT_RE.fullmatch(str(refs_root)):
@@ -188,8 +231,8 @@ def render_run_script(*, job_name: str, pipeline: str, revision: str, run_dir: s
         "CPUS": res["cpus"],
         "PARTITION": res["partition"],
         "RUN_DIR": run_dir,
-        "PIPELINE": pipeline,
-        "REVISION": revision,
+        "PIPELINE": source,
+        "REVISION_FLAG": revision_flag,
         "GENOME": genome,
         "REFS_FLAGS": refs_flags,
         "WORK_DIR": work_dir,
