@@ -27,10 +27,16 @@ def test_groups_by_type_and_renders_each(tmp_path):
         {"rows": rows, "existing_parent_uids": "D.SEQ-1,D.SEQ-2"},
         _Cfg(), None, None, None, str(tmp_path))
 
-    assert set(out["saved_files"]) == {"reingest_A.SCXP", "reingest_A.ALN"}
+    import re
+    # artifact KEYS must be route-safe (download route accepts only [\w]+; no dots),
+    # while the file on disk keeps the readable dotted name.
+    assert set(out["saved_files"]) == {"reingest_A_SCXP", "reingest_A_ALN"}
+    assert all(re.fullmatch(r"[\w]+", k) for k in out["saved_files"])
     assert out["qa"]["A.SCXP"]["disposition"] == "CLEAN"
+    scxp_path = out["saved_files"]["reingest_A_SCXP"]
+    assert scxp_path.endswith("reingest_A.SCXP.xlsx")
     # the rendered workbook round-trips through the real parser
-    batch = parse_traditional_file(out["saved_files"]["reingest_A.SCXP"])
+    batch = parse_traditional_file(scxp_path)
     assert len(batch.rows) == 2
     assert all(r.SampleType == "A.SCXP" for r in batch.rows)
 

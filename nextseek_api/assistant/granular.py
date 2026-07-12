@@ -252,10 +252,14 @@ def _build_upload_xlsx(args, config, session, write_gate, neo4j_exec, outputs_di
         qa[st] = {"disposition": report.disposition, "hard": report.hard, "soft": report.soft}
         if report.disposition == HARD_REJECT:
             continue
-        safe = st.replace("/", "_").replace(" ", "_")
-        path = os.path.join(out_root, f"reingest_{safe}.xlsx")
+        safe_name = st.replace("/", "_").replace(" ", "_")          # readable filename (keeps the dot)
+        # The artifact KEY is the download URL segment, which the route only
+        # accepts as [\w]+ — so it must be word-chars only (A.SCXP -> A_SCXP).
+        # The file on disk keeps the dot; download serves it by its real name.
+        safe_key = safe_name.replace(".", "_").replace("-", "_")
+        path = os.path.join(out_root, f"reingest_{safe_name}.xlsx")
         render_upload_workbook(st, st_rows, path)
-        saved_files[f"reingest_{safe}"] = path
+        saved_files[f"reingest_{safe_key}"] = path
     return {"saved_files": saved_files, "qa": qa}
 
 
