@@ -70,6 +70,7 @@ from nextseek_api.assistant.models_api import (
     ApiReadResponse,
     ApiWriteRequest,
     ApiWriteResponse,
+    BuildUploadXlsxRequest,
     EntityOpRequest,
     EntityOpResponse,
     GraphOpRequest,
@@ -79,6 +80,7 @@ from nextseek_api.assistant.models_api import (
     ParseOpResponse,
     ReportOpRequest,
     ReportOpResponse,
+    RunLsRequest,
     SubmissionRequest,
     SubmissionResponse,
 )
@@ -200,6 +202,8 @@ _GRANULAR_REQUEST_MODELS = {
     "api-write": ApiWriteRequest,
     "report": ReportOpRequest,
     "generate-submission": SubmissionRequest,
+    "run-ls": RunLsRequest,
+    "build-upload-xlsx": BuildUploadXlsxRequest,
 }
 
 
@@ -252,6 +256,10 @@ def _granular_args(op: str, req) -> dict:
         return {"mode": req.mode, "project": req.project}
     if op == "generate-submission":
         return {"type": req.type, "uids": req.uids, "query": req.query}
+    if op == "run-ls":
+        return {"run_dir": req.run_dir}
+    if op == "build-upload-xlsx":
+        return {"rows": req.rows, "existing_parent_uids": req.existing_parent_uids}
     return {}
 
 
@@ -1204,7 +1212,7 @@ class AssistantViewSet(viewsets.ViewSet):
         # report + generate-submission both persist real artifacts to disk (the
         # reporter summary / the submission-emitter workbooks), so both need a
         # writable run-root under an allowed artifact root.
-        outputs_dir = _granular_outputs_dir() if op in ("report", "generate-submission") else None
+        outputs_dir = _granular_outputs_dir() if op in ("report", "generate-submission", "build-upload-xlsx") else None
 
         try:
             result = run_op(
@@ -1222,7 +1230,7 @@ class AssistantViewSet(viewsets.ViewSet):
         resp_body = {"op": op, "result": result}
         # report/generate-submission produce artifacts; register a bundle so they
         # are fetchable over HTTP via download_artifact, and hand back the URLs.
-        if op in ("report", "generate-submission"):
+        if op in ("report", "generate-submission", "build-upload-xlsx"):
             resp_body["download"] = self._register_artifact_bundle(request, req, op, result)
         return Response(resp_body, status=status.HTTP_200_OK)
 
@@ -1243,13 +1251,14 @@ class AssistantViewSet(viewsets.ViewSet):
         history = chat_session.results_history or []
         bundle_id = max((b.get("id", 0) for b in history if isinstance(b, dict)), default=0) + 1
         saved_files = result.get("saved_files") if isinstance(result, dict) else None
-        if op == "report":
-            bundle = {"id": bundle_id, "mode": "reporter",
-                      "report_saved_files": saved_files or {}, "report_writer_output": {}}
-        else:  # generate-submission — real emitter workbooks in saved_files PLUS
-               # the on-the-fly all_tables xlsx built from the writer output.
+        if op == "generate-submission":
+            # real emitter workbooks in saved_files PLUS the on-the-fly all_tables xlsx.
             bundle = {"id": bundle_id, "mode": "generate-submission",
                       "report_saved_files": saved_files or {}, "report_writer_output": result}
+        else:  # report / build-upload-xlsx — saved_files served directly.
+            bundle = {"id": bundle_id,
+                      "mode": "reingest" if op == "build-upload-xlsx" else "reporter",
+                      "report_saved_files": saved_files or {}, "report_writer_output": {}}
         history.append(bundle)
         chat_session.results_history = history
         chat_session.save(update_fields=["results_history", "updated_at"])
@@ -1344,3 +1353,25 @@ class AssistantViewSet(viewsets.ViewSet):
     @action(detail=False, methods=["post"], url_path="generate-submission")
     def generate_submission(self, request):
         return self._run_granular_op(request, "generate-submission")
+
+    @extend_schema(
+        operation_id="Assistant: Run Ls",
+        description="Recursive read-only listing of a finished Luria run directory (reingest input).",
+        tags=["Assistant"],
+        request=RunLsRequest,
+        responses={401: OpErrorResponse, 422: OpErrorResponse},
+    )
+    @action(detail=False, methods=["post"], url_path="run-ls")
+    def run_ls(self, request):
+        return self._run_granular_op(request, "run-ls")
+
+    @extend_schema(
+        operation_id="Assistant: Build Upload Xlsx",
+        description="Render NExtSEEK 4-sheet upload workbook(s) from reingest rows (one per sample type).",
+        tags=["Assistant"],
+        request=BuildUploadXlsxRequest,
+        responses={401: OpErrorResponse, 422: OpErrorResponse},
+    )
+    @action(detail=False, methods=["post"], url_path="build-upload-xlsx")
+    def build_upload_xlsx(self, request):
+        return self._run_granular_op(request, "build-upload-xlsx")

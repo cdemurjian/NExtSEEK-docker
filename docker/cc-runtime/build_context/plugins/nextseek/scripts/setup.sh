@@ -14,6 +14,8 @@ ALLOW='[
   "Bash(nextseek-parse:*)",
   "Bash(nextseek-plan:*)",
   "Bash(nextseek-pipeline:*)",
+  "Bash(nextseek-run-ls:*)",
+  "Bash(nextseek-build-upload-xlsx:*)",
   "Bash(nextseek-api-read --parser-plan*)",
   "Bash(nextseek-graph:*)",
   "Bash(nextseek-report --mode samples*)",

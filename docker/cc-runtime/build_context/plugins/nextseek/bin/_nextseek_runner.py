@@ -266,6 +266,39 @@ def _api_pass() -> str:  # pragma: no cover
     return os.environ.get("API_PASS", "")  # pragma: no cover
 
 
+def _dispatch_run_ls(args):
+    """Recursive read-only listing of a finished Luria run dir (reingest input)."""
+    if _dry_run():  # pragma: no branch
+        return {"run_dir": args.run_dir, "truncated": False, "tree": "[dry-run]"}  # pragma: no cover
+    if not args.run_dir:  # pragma: no cover
+        _err("VALIDATION", "missing --run-dir", 3)  # pragma: no cover
+    import _sidecar_client as sc  # pragma: no cover
+    try:  # pragma: no cover
+        return sc.call_op("run-ls", {"run_dir": args.run_dir},  # pragma: no cover
+                          ns_login=(_api_user(), _api_pass()),  # pragma: no cover
+                          sidecar_url=sc.sidecar_url_from_env())  # pragma: no cover
+    except sc.SidecarCallError as e:  # pragma: no cover
+        _err(e.code, e.message, e.exit_code)  # pragma: no cover
+
+
+def _dispatch_build_upload_xlsx(args):
+    """Render NExtSEEK 4-sheet upload workbook(s) from CC-composed reingest rows."""
+    if _dry_run():  # pragma: no branch
+        return {"saved_files": {}, "qa": {}}  # pragma: no cover
+    if not args.rows:  # pragma: no cover
+        _err("VALIDATION", "missing --rows", 3)  # pragma: no cover
+    import _sidecar_client as sc  # pragma: no cover
+    body = {"rows": args.rows}  # pragma: no cover
+    if getattr(args, "existing_parent_uids", None):  # pragma: no cover
+        body["existing_parent_uids"] = args.existing_parent_uids  # pragma: no cover
+    try:  # pragma: no cover
+        return sc.call_op("build-upload-xlsx", body,  # pragma: no cover
+                          ns_login=(_api_user(), _api_pass()),  # pragma: no cover
+                          sidecar_url=sc.sidecar_url_from_env())  # pragma: no cover
+    except sc.SidecarCallError as e:  # pragma: no cover
+        _err(e.code, e.message, e.exit_code)  # pragma: no cover
+
+
 _DISPATCH = {
     "query": _dispatch_query,
     "entity": _dispatch_entity,
@@ -277,6 +310,8 @@ _DISPATCH = {
     "report": _dispatch_report,
     "generate-submission": _dispatch_generate_submission,
     "pipeline": _dispatch_pipeline,
+    "run-ls": _dispatch_run_ls,
+    "build-upload-xlsx": _dispatch_build_upload_xlsx,
 }
 
 
@@ -292,6 +327,9 @@ def main() -> None:
     p.add_argument("--uids")  # for generate-submission
     p.add_argument("--pipeline")  # for pipeline (nf-core key)
     p.add_argument("--message")  # for pipeline (CC-composed summary)
+    p.add_argument("--run-dir")  # for run-ls (finished Luria run dir)
+    p.add_argument("--rows")  # for build-upload-xlsx (JSON rows)
+    p.add_argument("--existing-parent-uids")  # for build-upload-xlsx (Parent QA)
     p.add_argument("--planner", action="store_true",  # for query
                    help="Use run_query_plan instead of run_query (multi-step capable)")
     args = p.parse_args()
