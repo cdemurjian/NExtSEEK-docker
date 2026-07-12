@@ -63,11 +63,13 @@ _DEFAULT_BEDROCK_PROXY_URL = os.environ.get(
 
 # Per-turn cost + time bounds. A hard USD spend cap via ``claude
 # --max-budget-usd`` (Claude Code stops the turn when cost hits it; 0 disables),
-# a turn cap via ``--max-turns``, and a wall-clock timeout (hard-capped 180s)
+# a turn cap via ``--max-turns``, and a wall-clock timeout (hard-capped 1800s)
 # that stops + force-removes the container if the turn overruns. All overridable.
-_DEFAULT_MAX_BUDGET_USD = float(os.environ.get("NEXTSEEK_CC_MAX_BUDGET_USD", "2.00"))
+# NB: raised from 180s -> 1800s + budget 2.00 -> 5.00 for long agentic turns
+# (reingest: ls a large run tree, reason, compose rows, render the workbook).
+_DEFAULT_MAX_BUDGET_USD = float(os.environ.get("NEXTSEEK_CC_MAX_BUDGET_USD", "5.00"))
 _DEFAULT_MAX_TURNS = os.environ.get("NEXTSEEK_CC_MAX_TURNS", "50")
-_TIMEOUT_HARD_MAX = 180  # seconds; project rule (run_headless._TIMEOUT_HARD_MAX)
+_TIMEOUT_HARD_MAX = 1800  # seconds; ceiling on a CC turn (env NEXTSEEK_CC_TIMEOUT_SECONDS tunes within it)
 _DEFAULT_TURN_TIMEOUT = min(
     int(os.environ.get("NEXTSEEK_CC_TIMEOUT_SECONDS", str(_TIMEOUT_HARD_MAX))),
     _TIMEOUT_HARD_MAX,

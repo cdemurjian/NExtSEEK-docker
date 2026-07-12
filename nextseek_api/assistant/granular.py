@@ -190,7 +190,7 @@ def _generate_submission(args, config, session, write_gate, neo4j_exec, outputs_
     return result
 
 
-_RUN_LS_CAP = 200_000  # bytes of `ls -laR` returned to CC before truncation
+_RUN_LS_CAP = 2_000_000  # bytes of `ls -laR` returned to CC before truncation (well under the 16 MiB WS cap)
 
 
 def _run_ls(args, config, session, write_gate, neo4j_exec, outputs_dir):
