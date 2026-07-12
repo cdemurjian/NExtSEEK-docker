@@ -190,6 +190,31 @@ def _generate_submission(args, config, session, write_gate, neo4j_exec, outputs_
     return result
 
 
+_RUN_LS_CAP = 200_000  # bytes of `ls -laR` returned to CC before truncation
+
+
+def _run_ls(args, config, session, write_gate, neo4j_exec, outputs_dir):
+    """Read-only recursive listing of a finished Luria run dir (reingest input).
+
+    Validates ``run_dir`` is under ``<LURIA working_path>/runs`` (no traversal),
+    then SSHes Luria and runs ``ls -laR``. Returns the tree text (capped). Never
+    writes to Luria.
+    """
+    import shlex
+    luria_env = getattr(config, "LURIA_ENV", None) or {}
+    working_path = str(luria_env.get("working_path") or "").rstrip("/")
+    if not working_path or not luria_env.get("key"):
+        raise OpValidationError("Luria is not configured (LURIA_ENV incomplete)")
+    runs_root = working_path + "/runs"
+    run_dir = os.path.normpath(str(args["run_dir"]))
+    if run_dir != runs_root and not run_dir.startswith(runs_root + "/"):
+        raise OpValidationError(f"run_dir must be under {runs_root}")
+    from chat_nextseek.luria.ssh import prepare_key, ssh_run
+    key_path = prepare_key(luria_env["key"])
+    out = ssh_run(luria_env, f"ls -laR {shlex.quote(run_dir)}", key_path=key_path)
+    return {"run_dir": run_dir, "truncated": len(out) > _RUN_LS_CAP, "tree": out[:_RUN_LS_CAP]}
+
+
 _HANDLERS: dict[str, Callable] = {
     "entity": _entity,
     "parse": _parse,
@@ -198,4 +223,5 @@ _HANDLERS: dict[str, Callable] = {
     "api-write": _api_write,
     "report": _report,
     "generate-submission": _generate_submission,
+    "run-ls": _run_ls,
 }
