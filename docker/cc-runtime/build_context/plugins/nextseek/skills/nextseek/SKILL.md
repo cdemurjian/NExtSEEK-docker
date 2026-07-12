@@ -132,9 +132,11 @@ upload sheet for the user to REVIEW and upload — it does **not** write to NExt
 
 1. `nextseek-run-ls --run-dir <finished run dir>` → the recursive `ls -laR` tree of the outputs.
 2. Reason over the tree + the sample-type catalog. Decide, per output, which `A.*` analysis type it
-   is (BAM → `A.ALN`; count/expression matrix → `A.SCXP`/`A.GEX`; VCF → `A.VCF`), sampling how prior
-   `A.*` rows in this project cite `Parent` (via `nextseek-graph`/`nextseek-api-read`) before inventing.
-   Resolve the input cohort's `D.SEQ` UIDs, their `Scientist`, and their project the same way.
+   is (BAM → `A.ALN`; count/expression matrix → `A.SCXP`/`A.GEX`; VCF → `A.VCF`). Get the input
+   cohort's `Scientist`, project, and how existing `A.*` rows cite `Parent` with **`nextseek-api-read`
+   on a `D.SEQ` sample** — these are sample *attributes*, so use `api-read` (a REST fetch), NOT
+   `nextseek-graph`. Graph is for lineage traversal only; asked for metadata it returns empty Cypher.
+   Only if a value genuinely can't be fetched, mark it `*** PLACEHOLDER ***` — do not block on it.
 3. Compose one row per output sample: `{"SampleType": "A.SCXP", "json_metadata": {"Parent": "<input
    D.SEQ UID>", "Scientist": "<carried from the input D.SEQ>", "Pipeline": "...", "ReferenceGenome":
    "...", "Aligner": "...", "File_PrimaryData": "...", ...}, "assay_ids": [<int>...]}`. `Parent` is the
